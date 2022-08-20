@@ -20,6 +20,7 @@ logger:
   logs:
     modbus_controller.sensor: WARN
     modbus_controller.output: WARN
+    sensor: WARN
 
 globals:
   - id: stooklijn_target
@@ -317,7 +318,7 @@ sensor:
               pre_run_time = 7; // equals 70 seconds. Based on 10s 'clock'
               //Set initial target through modbus (set level needs value between 0-1, so divide by 100)
               id(water_temp_target_output).set_level(id(stooklijn_target)*0.01);
-              ESP_LOGD("anti-pendel", "Initial target set: %d outlet: %f",id(stooklijn_target),x);
+              ESP_LOGD("anti-pendel", "Modbus initial target set: %d outlet: %f",id(stooklijn_target),x);
               id(run_start) = 0;
             }
             
