@@ -5,10 +5,14 @@ Tested with 3-phase 14kW U34 version. So propably works at least with 12-14-16kW
 
 This is a hobby project. I share this to allow other people to pick up ideas and contribute. All assistance is welcome. I will not provide support, so use at your own risk. And make sure you know what you are doing, by using this script it is possible that your unit stops functioning or breaks and you could electrocute yourself.
 
+## Whats new:
+Experimental (simple) PID controller. It works, but I am not sure if it really addes value compared to the simple algoritm. It fixes some issues (with HP not starting, because target is set too low). But there are other ways to fix that.
+But it is a lot of fun to experiment with.
+
 ## Known limitations/ToDo:
 * The LG has a (configurable) hysteresis on the outgoing water temperature. When the LG reaches the target temperature and switches the water temp rises/decreases (cooling/heating). The scripts then continues to adjusts the target temperature as well. This may cause a condition in which the LG never switches on again.
 * Further testing on different models needed
-* Algoritm is very basic. Introduce some form of PID control?
+* In progress - Algoritm is very basic. Introduce some form of PID control?
 
 ## Hardware
 Works with any ESP chip/board supported by ESPHome.
