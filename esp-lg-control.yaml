@@ -53,7 +53,7 @@ globals:
   - id: Kd
     type: float
     restore_value: no
-    initial_value: "10"
+    initial_value: "1"
   
 number:
   - platform: template
@@ -262,6 +262,8 @@ sensor:
       then:
         - lambda: |-
             //Main program logic this loop runs every 'clock' cycle when modbus data is received for this sensor
+            //Useless if working mode = 0
+            if(id(working_mode) == 0) return;
             static float prev_oat = 0;
             //integral for PID controller
             static float integral = 0;
@@ -275,8 +277,8 @@ sensor:
             
             // calculate stooklijn target
             float oat = round(id(buiten_temp).state);
-            // if inactive (working mode 0), or no oat change, no update needed, unless forced
-            if((id(working_mode) != 0 && prev_oat != oat) || id(force_update_stooklijn || id(run_start))){
+            // if no oat change, no update needed, unless forced or first run
+            if(prev_oat != oat || id(force_update_stooklijn) || id(run_start)){
               prev_oat = oat;
               //reset force boolean
               id(force_update_stooklijn) = false;
@@ -307,9 +309,6 @@ sensor:
             }
           
             //calculate new (anti pendel) target
-            //only run if heatpump is active
-            if(id(working_mode) == 0) return;
-
             // very basic Pid Function
             if(id(run_start)){
               integral = 0;
@@ -347,11 +346,11 @@ sensor:
               temp_new_target = x + control_value;
               if(id(working_mode) == 1){
                 // cooling
-                temp_new_target = floor(temp_new_target*10)/10; // round down foor cooling 1 decimal
+                temp_new_target = floor(temp_new_target*2)/2; // round down to nearest half (0 or 0.5)
                 if(temp_new_target < id(stooklijn_target)) temp_new_target = id(stooklijn_target);
               } else {
                 //heating
-                temp_new_target = ceil(temp_new_target*10)/10; //round up for heating 1 decimal
+                temp_new_target = ceil(temp_new_target*2)/2; //round up to nearest half
                 if(temp_new_target > id(stooklijn_target)) temp_new_target = id(stooklijn_target);
               }
               ESP_LOGD("anti-pendel", "PID error: %f i: %f d: %f P: %f I: %f D: %f",error,integral,derivative,error*id(Kp),iterm,derivative*id(Kd));
