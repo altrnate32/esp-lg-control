@@ -19,6 +19,7 @@ packages:
 logger:
   logs:
     modbus_controller.sensor: WARN
+    modbus_controller.output: WARN
 
 globals:
   - id: stooklijn_target
@@ -48,7 +49,7 @@ globals:
   - id: Ki
     type: float
     restore_value: no
-    initial_value: "0.02"
+    initial_value: "0.01"
   - id: Kd
     type: float
     restore_value: no
@@ -131,11 +132,6 @@ switch:
             // update working mode
             id(working_mode) = 1;
             id(run_start) = true;
-            id(force_update_stooklijn) = true;
-            // set initial value
-            id(stooklijn_target) = id(cooling_target_wtemp).state;
-            if(id(stooklijn_target) < 16) id(stooklijn_target) = 16;
-            else if(id(stooklijn_target) > 20) id(stooklijn_target) = 20;
   - platform: gpio
     name: "WP Heat"
     pin: 19
@@ -154,8 +150,7 @@ switch:
             // update working mode
             id(working_mode) = 2;
             id(run_start) = true;
-            id(force_update_stooklijn) = true;
-            
+
 # Eneco Toon anti pendel script. Toon sometimes temporarily switches the output off, while heat is still needed
 # This script delays switching the heating of for 5 minutes. If heating switches back on within this timeframe the script stops
 script:
@@ -266,10 +261,8 @@ sensor:
     on_value:
       then:
         - lambda: |-
-            //calculate new (anti pendel) target
-            //only run if heatpump is active
-            if(id(working_mode) == 0) return;
-            
+            //Main program logic this loop runs every 'clock' cycle when modbus data is received for this sensor
+            static float prev_oat = 0;
             //integral for PID controller
             static float integral = 0;
             // previous error value. To calculate derivative
@@ -280,12 +273,52 @@ sensor:
             float derivative = 0;
             float temp_new_target = id(var_pendel_watertemp_target);
             
+            // calculate stooklijn target
+            float oat = round(id(buiten_temp).state);
+            // if inactive (working mode 0), or no oat change, no update needed, unless forced
+            if((id(working_mode) != 0 && prev_oat != oat) || id(force_update_stooklijn || id(run_start))){
+              prev_oat = oat;
+              //reset force boolean
+              id(force_update_stooklijn) = false;
+              if(id(working_mode) == 1){
+                //Cooling
+                ESP_LOGD("stooklijn", "Stooklijn, working mode is cooling");
+                id(stooklijn_target) = id(cooling_target_wtemp).state;
+              } else {
+                //Heating
+                //formula is wTemp = Z x Sqrt(-OAT+20) + 20
+                //formula to calculate Z = wTempMax-20 / Sqrt(-OATMin + 20)
+                const float Z = ((float)id(stooklijn_max_wtemp).state-20)/(float)sqrt((0 - (float)id(stooklijn_min_oat).state) + 20);
+                ESP_LOGD("stooklijn", "Stooklijn, working mode is heating, with oat: %f, Z: %f",oat, Z);
+                if(oat < id(stooklijn_min_oat).state) {
+                  //if oat below minimum oat, clamp top minimum value
+                  oat = id(stooklijn_min_oat).state;
+                } else if (oat > 20) {
+                  //if oat above max value, clamp tp maximum value
+                  oat = 20;
+                }
+                id(stooklijn_target) = (int)round((Z * sqrt((0-oat)+20))+20);
+                if(id(stooklijn_target) > id(stooklijn_max_wtemp).state) id(stooklijn_target) = id(stooklijn_max_wtemp).state;
+                if(id(stooklijn_target) < 20) id(stooklijn_target) = 20;
+              }
+              ESP_LOGD("stooklijn", "New stooklijn target value (after correction): %d", id(stooklijn_target));
+              //publish new stooklijn value to watertemp value sensor
+              id(watertemp_target).publish_state(id(stooklijn_target));
+            }
+          
+            //calculate new (anti pendel) target
+            //only run if heatpump is active
+            if(id(working_mode) == 0) return;
+
             // very basic Pid Function
             if(id(run_start)){
               integral = 0;
               derivative = 0;
               last_error = 0;
-              pre_run_time = 12; // equals 120 seconds. Based on 10s 'clock'
+              pre_run_time = 7; // equals 70 seconds. Based on 10s 'clock'
+              //Set initial target through modbus (set level needs value between 0-1, so divide by 100)
+              id(water_temp_target_output).set_level(id(stooklijn_target)*0.01);
+              ESP_LOGD("anti-pendel", "Initial target set: %d outlet: %f",id(stooklijn_target),x);
               id(run_start) = 0;
             }
             
@@ -370,42 +403,6 @@ sensor:
     accuracy_decimals: 1
     filters:
       - multiply: 0.1
-    on_value:
-      then:
-        - lambda: |-
-            // calculate stooklijn target
-            static float prev_oat = 0;
-            float oat = round(x);
-            // if inactive (working mode 0) and not forced, no update needed
-            if(id(working_mode) == 0 && !id(force_update_stooklijn)) return;
-            // if oat same, or oat changed but mode is cooling (not OAT dependent) and no update forced then return
-            if ((prev_oat == oat || id(working_mode) == 1) && !id(force_update_stooklijn)) return;
-            prev_oat = oat;
-            id(force_update_stooklijn) = false;
-            if(id(working_mode) == 1){
-              //Cooling
-              ESP_LOGD("stooklijn", "Update forced, working mode is cooling");
-              id(stooklijn_target) = id(cooling_target_wtemp).state;
-            } else {
-              //Heating
-              //formula is wTemp = Z x Sqrt(-OAT+20) + 20
-              //formula to calculate Z = wTempMax-20 / Sqrt(-OATMin + 20)
-              const float Z = ((float)id(stooklijn_max_wtemp).state-20)/(float)sqrt((0 - (float)id(stooklijn_min_oat).state) + 20);
-              ESP_LOGD("stooklijn", "Working mode is heating, with oat: %f, Z: %f",oat, Z);
-              if(oat < id(stooklijn_min_oat).state) {
-                oat = id(stooklijn_min_oat).state;
-                ESP_LOGD("stooklijn", "Stooklijn oat < stooklijn_min_oat using stooklijn_min_oat for further calculation");
-              } else if (oat > 20) {
-                oat = 20;
-                ESP_LOGD("stooklijn", "Stooklijn OAT > 20, using 20 for further calculation");
-              }
-              id(stooklijn_target) = (int)round((Z * sqrt((0-oat)+20))+20);
-              if(id(stooklijn_target) > id(stooklijn_max_wtemp).state) id(stooklijn_target) = id(stooklijn_max_wtemp).state;
-              if(id(stooklijn_target) < 20) id(stooklijn_target) = 20;
-            }
-            ESP_LOGD("stooklijn", "New stooklijn target value (after correction): %d", id(stooklijn_target));
-            //publish new stooklijn value to watertemp value sensor
-            id(watertemp_target).publish_state(id(stooklijn_target));
   - platform: modbus_controller
     modbus_controller_id: lg
     name: "Bedrijfsmodus"
@@ -413,15 +410,6 @@ sensor:
     register_type: read
     address: 1
     value_type: U_WORD
-    on_value:
-      then:
-        - lambda: |-
-            // set force update stooklijn if working mode is changed and log the change (for debugging)
-            // In the scripts this data is not used, as it is unreliable due to modbus glitches
-            if(id(working_mode) != (int)x) {
-              id(force_update_stooklijn) = true;
-              ESP_LOGD("modbus", "Modbus working_mode change from: %d to %d", id(working_mode), (int)x);
-            }
   - platform: modbus_controller
     modbus_controller_id: lg
     name: "Doeltemperatuur"
