@@ -46,15 +46,15 @@ globals:
   - id: Kp
     type: float
     restore_value: no
-    initial_value: "0.4"
+    initial_value: "0.3"
   - id: Ki
     type: float
     restore_value: no
-    initial_value: "0.01"
+    initial_value: "0.0012"
   - id: Kd
     type: float
     restore_value: no
-    initial_value: "1"
+    initial_value: "0.85"
   
 number:
   - platform: template
@@ -263,8 +263,15 @@ sensor:
       then:
         - lambda: |-
             //Main program logic this loop runs every 'clock' cycle when modbus data is received for this sensor
-            //Useless if working mode = 0
+            static int alive_timer = 0; // 300 seconds
+            if(alive_timer == 0){
+              alive_timer = 31; // 300 seconds
+              ESP_LOGD("anti-pendel", "**alive** oat: %f inlet: %f outlet: %f ",id(buiten_temp).state,id(water_temp_retour).state,x);
+            }
+            alive_timer--;
+            //Do not run script if working mode = 0
             if(id(working_mode) == 0) return;
+            // hold previous script run ota value to check if it changed since last run
             static float prev_oat = 0;
             //integral for PID controller
             static float integral = 0;
@@ -314,7 +321,8 @@ sensor:
             if(id(run_start)){
               integral = 0;
               derivative = 0;
-              last_error = 0;
+              //set last error to current error, to prevent derivatie to start at current error value (error - 0)
+              last_error = error = id(stooklijn_target) - x ;
               pre_run_time = 7; // equals 70 seconds. Based on 10s 'clock'
               //Set initial target through modbus (set level needs value between 0-1, so divide by 100)
               id(water_temp_target_output).set_level(id(stooklijn_target)*0.01);
@@ -344,17 +352,11 @@ sensor:
               // control value clamping
               if (control_value > 10) control_value = 10;
               else if(control_value < -5) control_value = -5;
-              temp_new_target = x + control_value;
-              if(id(working_mode) == 1){
-                // cooling
-                temp_new_target = floor(temp_new_target*2)/2; // round down to nearest half (0 or 0.5)
-                if(temp_new_target < id(stooklijn_target)) temp_new_target = id(stooklijn_target);
-              } else {
-                //heating
-                temp_new_target = ceil(temp_new_target*2)/2; //round up to nearest half
-                if(temp_new_target > id(stooklijn_target)) temp_new_target = id(stooklijn_target);
-              }
-              ESP_LOGD("anti-pendel", "PID error: %f i: %f d: %f P: %f I: %f D: %f",error,integral,derivative,error*id(Kp),iterm,derivative*id(Kd));
+              temp_new_target = round((x + control_value)*2)/2; // round down to nearest half (0 or 0.5)
+              if(temp_new_target < id(stooklijn_target)) temp_new_target = id(stooklijn_target);
+              else if(temp_new_target > id(stooklijn_target)) temp_new_target = id(stooklijn_target);
+              
+              ESP_LOGD("anti-pendel", "PID error: %f i: %f d: %f P: %f I: %f D: %f U: %f",error,integral,derivative,error*id(Kp),iterm,derivative*id(Kd),control_value);
             } else {
               //update pre_run_time counter
               ESP_LOGD("anti-pendel", "Waiting for pre_run_time: %i",pre_run_time);
