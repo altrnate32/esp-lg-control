@@ -1,11 +1,24 @@
 esphome:
   name: esp-wp-control
+  on_boot:
+    priority: 800
+    then:
+      lambda: !lambda |-
+          //set initial states
+          id(relay1).turn_off();
+          if (id(toon_signal).state) {
+            id(relay2).turn_on();
+          } else {
+            id(relay2).turn_off();
+          }
 
 packages:
   config_values: !include config/config.yaml
 
-# Enable logging
+# Enable logging. Disable modbus controller debug messages
 logger:
+  logs:
+    modbus_controller.sensor: WARN
 
 globals:
   - id: stooklijn_target
@@ -21,10 +34,26 @@ globals:
     restore_value: no
     initial_value: '0'
   - id: var_pendel_watertemp_target
-    type: int
+    type: float
     restore_value: no
     initial_value: '30'
-    
+  - id: run_start
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+  - id: Kp
+    type: float
+    restore_value: no
+    initial_value: "0.4"
+  - id: Ki
+    type: float
+    restore_value: no
+    initial_value: "0.02"
+  - id: Kd
+    type: float
+    restore_value: no
+    initial_value: "10"
+  
 number:
   - platform: template
     name: "Stooklijn offset"
@@ -86,7 +115,7 @@ number:
 switch:
   - platform: gpio
     name: "WP Cool"
-    pin: 4
+    pin: 18
     id: relay1
     interlock: &interlock_group [relay1, relay2]
     interlock_wait_time: 2000ms
@@ -96,31 +125,35 @@ switch:
         - lambda: |-
             // update working mode
             id(working_mode) = 0;
-            id(force_update_stooklijn) = true;
     on_turn_on:
       then:
         - lambda: |-
             // update working mode
             id(working_mode) = 1;
+            id(run_start) = true;
             id(force_update_stooklijn) = true;
+            // set initial value
+            id(stooklijn_target) = id(cooling_target_wtemp).state;
+            if(id(stooklijn_target) < 16) id(stooklijn_target) = 16;
+            else if(id(stooklijn_target) > 20) id(stooklijn_target) = 20;
   - platform: gpio
     name: "WP Heat"
-    pin: 5
+    pin: 19
     id: relay2
     interlock: *interlock_group
-    interlock_wait_time: 2000ms
+    interlock_wait_time: 20s
     restore_mode: ALWAYS_OFF
     on_turn_off:
       then:
         - lambda: |-
             // update working mode
             id(working_mode) = 0;
-            id(force_update_stooklijn) = true;
     on_turn_on:
       then:
         - lambda: |-
             // update working mode
             id(working_mode) = 2;
+            id(run_start) = true;
             id(force_update_stooklijn) = true;
             
 # Eneco Toon anti pendel script. Toon sometimes temporarily switches the output off, while heat is still needed
@@ -138,8 +171,8 @@ modbus:
   send_wait_time: 200ms
   
 uart:
-  tx_pin: GPIO12
-  rx_pin: GPIO14
+  tx_pin: GPIO26
+  rx_pin: GPIO25
   baud_rate: 9600
   id: uart_modbus
   parity: none
@@ -150,7 +183,7 @@ modbus_controller:
   - id: lg
     address: 0x1 # the Modbus device addr
     modbus_id: modbus_lg
-    update_interval: 15s
+    update_interval: 10s #this is our main 'clock' all dependel logic follows this pace
     setup_priority: -10
 
 output:
@@ -165,11 +198,12 @@ output:
 binary_sensor:
   - platform: gpio # Toon input signal is connected to this input pin
     pin:
-      number: GPIO13
+      number: GPIO27
       mode:
         input: true
         pullup: false
     name: "WP Toon Signal"
+    id: toon_signal
     filters:
       - delayed_on: 500ms # Debounce
     on_press:
@@ -233,27 +267,75 @@ sensor:
       then:
         - lambda: |-
             //calculate new (anti pendel) target
-            static float pendel_stooklijn_target = 30;
+            //only run if heatpump is active
             if(id(working_mode) == 0) return;
-            float temp_new_target = 30;
-            //very basic algoritm, set target to current (rounded) outlet temp
-            if(id(working_mode) == 1){
-              // cooling
-              temp_new_target = floor(x); //round down for cooling
-              if(temp_new_target < id(stooklijn_target)) temp_new_target = id(stooklijn_target);
-            } else {
-              //heating
-              temp_new_target = ceil(x); //round up for cooling
-              if(temp_new_target > id(stooklijn_target)) temp_new_target = id(stooklijn_target);
+            
+            //integral for PID controller
+            static float integral = 0;
+            // previous error value. To calculate derivative
+            static float last_error = 0;
+            //pre run time, to prevent integral to saturate before compressor starts
+            static int pre_run_time = 0;
+            float error = 0;
+            float derivative = 0;
+            float temp_new_target = id(var_pendel_watertemp_target);
+            
+            // very basic Pid Function
+            if(id(run_start)){
+              integral = 0;
+              derivative = 0;
+              last_error = 0;
+              pre_run_time = 12; // equals 120 seconds. Based on 10s 'clock'
+              id(run_start) = 0;
             }
-            if(temp_new_target != pendel_stooklijn_target){
+            
+            //Run when compressor is running, or pre_run_time expired
+            if(id(compressor_running).state||pre_run_time == 0){
+              if(pre_run_time > 0) pre_run_time = 0; //reset pre_run_time if compressor is running
+              //calculate error
+              error = id(stooklijn_target) - x;
+              integral = integral + error;
+              // clamp integral to max 2 degrees
+              float iterm = integral * id(Ki);
+              if (iterm > 2) {
+                iterm = 2;
+                integral = 2/id(Ki);
+              } else if (iterm < -2) {
+                iterm = -2;
+                integral = -2/id(Ki);
+              }
+              derivative = error - last_error;
+              last_error = error;
+              float control_value = (error*id(Kp))+(iterm)+(id(Kd)*derivative);
+            
+              // control value clamping
+              if (control_value > 10) control_value = 10;
+              else if(control_value < -5) control_value = -5;
+              temp_new_target = x + control_value;
+              if(id(working_mode) == 1){
+                // cooling
+                temp_new_target = floor(temp_new_target*10)/10; // round down foor cooling 1 decimal
+                if(temp_new_target < id(stooklijn_target)) temp_new_target = id(stooklijn_target);
+              } else {
+                //heating
+                temp_new_target = ceil(temp_new_target*10)/10; //round up for heating 1 decimal
+                if(temp_new_target > id(stooklijn_target)) temp_new_target = id(stooklijn_target);
+              }
+              ESP_LOGD("anti-pendel", "PID error: %f i: %f d: %f P: %f I: %f D: %f",error,integral,derivative,error*id(Kp),iterm,derivative*id(Kd));
+            } else {
+              //update pre_run_time counter
+              ESP_LOGD("anti-pendel", "Waiting for pre_run_time: %i",pre_run_time);
+              if(pre_run_time > 0) pre_run_time--;
+            }
+            
+            if(temp_new_target != id(var_pendel_watertemp_target)){
               //set new target
-              pendel_stooklijn_target = temp_new_target;
+              id(var_pendel_watertemp_target) = temp_new_target;
               //update sensor
-              id(pendel_watertemp_target).publish_state(pendel_stooklijn_target);
+              id(pendel_watertemp_target).publish_state(id(var_pendel_watertemp_target));
               //update target through modbus (set level needs value between 0-1, so divide by 100)
-              id(water_temp_target_output).set_level(pendel_stooklijn_target*0.01);
-              ESP_LOGD("anti-pendel", "New pendel_stooklijn_target set outlet_temp: %f target: %f",x, pendel_stooklijn_target);
+              id(water_temp_target_output).set_level(id(var_pendel_watertemp_target)*0.01);
+              ESP_LOGD("anti-pendel", "New pendel_watertemp_target set: %f outlet: %f",id(pendel_watertemp_target).state,x);
             }
   - platform: modbus_controller
     modbus_controller_id: lg
@@ -365,4 +447,4 @@ sensor:
     unit_of_measurement: "°C"
     update_interval: 3600s
     lambda: |-
-        return id(var_pendel_watertemp_target);
+        return round(id(var_pendel_watertemp_target)*10)/10;
