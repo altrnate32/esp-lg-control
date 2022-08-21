@@ -25,7 +25,7 @@ logger:
 
 globals:
   - id: stooklijn_target
-    type: int
+    type: float
     restore_value: no
     initial_value: '30'
   - id: force_update_stooklijn
@@ -44,19 +44,7 @@ globals:
     type: bool
     restore_value: no
     initial_value: 'false'
-  - id: Kp
-    type: float
-    restore_value: no
-    initial_value: "0.3"
-  - id: Ki
-    type: float
-    restore_value: no
-    initial_value: "0.0012"
-  - id: Kd
-    type: float
-    restore_value: no
-    initial_value: "0.85"
-  
+
 number:
   - platform: template
     name: "Stooklijn offset"
@@ -266,23 +254,23 @@ sensor:
             //Main program logic this loop runs every 'clock' cycle when modbus data is received for this sensor
             static int alive_timer = 0; // 300 seconds
             if(alive_timer == 0){
+              // post an 'alive' debug message in the logs every 300 seconds
               alive_timer = 31; // 300 seconds
               ESP_LOGD("anti-pendel", "**alive** oat: %f inlet: %f outlet: %f ",id(buiten_temp).state,id(water_temp_retour).state,x);
             }
             alive_timer--;
+            
             //Do not run script if working mode = 0
             if(id(working_mode) == 0) return;
+            
             // hold previous script run ota value to check if it changed since last run
             static float prev_oat = 0;
-            //integral for PID controller
-            static float integral = 0;
-            // previous error value. To calculate derivative
-            static float last_error = 0;
-            //pre run time, to prevent integral to saturate before compressor starts
+            //pre run time
             static int pre_run_time = 0;
-            float error = 0;
-            float derivative = 0;
+            //new anti-pendel target
             float temp_new_target = id(var_pendel_watertemp_target);
+            //system logic (to switch off after target is reached)
+            static bool target_reached = false;
             
             // calculate stooklijn target
             float oat = round(id(buiten_temp).state);
@@ -312,54 +300,37 @@ sensor:
                 if(id(stooklijn_target) > id(stooklijn_max_wtemp).state) id(stooklijn_target) = id(stooklijn_max_wtemp).state;
                 if(id(stooklijn_target) < 20) id(stooklijn_target) = 20;
               }
-              ESP_LOGD("stooklijn", "New stooklijn target value (after correction): %d", id(stooklijn_target));
+              ESP_LOGD("stooklijn", "New stooklijn target value (after correction): %f", id(stooklijn_target));
               //publish new stooklijn value to watertemp value sensor
               id(watertemp_target).publish_state(id(stooklijn_target));
             }
           
-            //calculate new (anti pendel) target
-            // very basic Pid Function
+            // calculate new (anti pendel) target
+            // very basic algorithm
+            // it initializes at the start of a run (when working mode changes tot 1 or 2)
+            // then sets initial target to 'real' target, to allow HP to start up
+            // when the compressor turn on the logic start running, setting a new target at the nearest higher .5 degrees
+            // when the new target equals the new target the logic stops, so the HP can take over again an run its own logic
+            // system resets at heating/cooling mode stop (system working mode 0) for example when the room thermostat stops the heating
             if(id(run_start)){
-              integral = 0;
-              derivative = 0;
-              //set last error to current error, to prevent derivatie to start at current error value (error - 0)
-              last_error = error = id(stooklijn_target) - x ;
+              //initialize values. run_start is set to true by the switches that control heating/cooling mode
               pre_run_time = 7; // equals 70 seconds. Based on 10s 'clock'
-              //Set initial target through modbus (set level needs value between 0-1, so divide by 100)
+              //activate system
+              target_reached = false;
+              //Set initial target to trigger compressor startup (set level needs value between 0-1, so divide by 100)
               id(water_temp_target_output).set_level(id(stooklijn_target)*0.01);
-              ESP_LOGD("anti-pendel", "Modbus initial target set: %d outlet: %f",id(stooklijn_target),x);
+              ESP_LOGD("anti-pendel", "Modbus initial target set: %f outlet: %f",id(stooklijn_target),x);
               id(run_start) = 0;
-              ESP_LOGD("anti-pendel", "TEMP_IN;TEMP_OUT;TARGET;PENDEL_TARGET;ERROR;INTEGRAL;DERIVATIVE;P;I;D;U");
             }
             
-            //Run when compressor is running, or pre_run_time expired
-            if(id(compressor_running).state||pre_run_time == 0){
-              if(pre_run_time > 0) pre_run_time = 0; //reset pre_run_time if compressor is running
-              //calculate error
-              error = id(stooklijn_target) - x;
-              integral = integral + error;
-              // clamp integral to max 1 degrees
-              float iterm = integral * id(Ki);
-              if (iterm > 1) {
-                iterm = 1;
-                integral = 1/id(Ki);
-              } else if (iterm < -1) {
-                iterm = -1;
-                integral = -1/id(Ki);
-              }
-              derivative = error - last_error;
-              last_error = error;
-              float control_value = (error*id(Kp))+(iterm)+(id(Kd)*derivative);
-            
-              // control value clamping
-              if (control_value > 5) control_value = 5;
-              else if(control_value < -5) control_value = -5;
-              temp_new_target = round((x + control_value)*2)/2; // round to nearest half (0 or 0.5)
-              
+            //Run when compressor is running and target not reached
+            if(id(compressor_running).state && !target_reached){
+              temp_new_target = ceil(x*2)/2;
+              //make sure value is below minimum, or above maximum
               if(id(working_mode) == 1 && temp_new_target < id(stooklijn_target)) temp_new_target = id(stooklijn_target);
               else if(id(working_mode) == 2 && temp_new_target > id(stooklijn_target)) temp_new_target = id(stooklijn_target);
-              ESP_LOGD("anti-pendel", "%f;%f;%d;%f;%f;%f;%f;%f;%f;%f;%f",id(water_temp_retour).state,x,id(stooklijn_target),temp_new_target,error,integral,derivative,error*id(Kp),iterm,derivative*id(Kd),control_value);
-            } else {
+              ESP_LOGD("anti-pendel", "RETURN_TEMP: %f OUTLET_TEMP: %f TARGET: %f PENDEL_TARGET: %f",id(water_temp_retour).state,x,id(stooklijn_target),temp_new_target);
+            } else if(!target_reached) {
               //update pre_run_time counter
               ESP_LOGD("anti-pendel", "Waiting for pre_run_time: %i",pre_run_time);
               if(pre_run_time > 0) pre_run_time--;
@@ -373,6 +344,11 @@ sensor:
               //update target through modbus (set level needs value between 0-1, so divide by 100)
               id(water_temp_target_output).set_level(id(var_pendel_watertemp_target)*0.01);
               // ESP_LOGD("anti-pendel", "New pendel_watertemp_target set: %f outlet: %f",id(pendel_watertemp_target).state,x);
+              if(temp_new_target == id(stooklijn_target)){
+                //deactive system logic until next run
+                target_reached = true;
+                ESP_LOGD("anti-pendel", "Target reached, system inactive target: %f pendel_target: %f",id(stooklijn_target),id(pendel_watertemp_target).state);
+              }
             }
   - platform: modbus_controller
     modbus_controller_id: lg
