@@ -20,6 +20,7 @@ logger:
   logs:
     modbus_controller.sensor: WARN
     modbus_controller.output: WARN
+    esp32.preferences: WARN
     sensor: WARN
 
 globals:
@@ -301,10 +302,10 @@ sensor:
                 const float Z = ((float)id(stooklijn_max_wtemp).state-20)/(float)sqrt((0 - (float)id(stooklijn_min_oat).state) + 20);
                 ESP_LOGD("stooklijn", "Stooklijn, working mode is heating, with oat: %f, Z: %f",oat, Z);
                 if(oat < id(stooklijn_min_oat).state) {
-                  //if oat below minimum oat, clamp top minimum value
+                  //if oat below minimum oat, clamp to minimum value
                   oat = id(stooklijn_min_oat).state;
                 } else if (oat > 20) {
-                  //if oat above max value, clamp tp maximum value
+                  //if oat above max value, clamp to maximum value
                   oat = 20;
                 }
                 id(stooklijn_target) = (int)round((Z * sqrt((0-oat)+20))+20);
@@ -328,6 +329,7 @@ sensor:
               id(water_temp_target_output).set_level(id(stooklijn_target)*0.01);
               ESP_LOGD("anti-pendel", "Modbus initial target set: %d outlet: %f",id(stooklijn_target),x);
               id(run_start) = 0;
+              ESP_LOGD("anti-pendel", "TEMP_IN;TEMP_OUT;TARGET;PENDEL_TARGET;ERROR;INTEGRAL;DERIVATIVE;P;I;D;U");
             }
             
             //Run when compressor is running, or pre_run_time expired
@@ -336,27 +338,27 @@ sensor:
               //calculate error
               error = id(stooklijn_target) - x;
               integral = integral + error;
-              // clamp integral to max 2 degrees
+              // clamp integral to max 1 degrees
               float iterm = integral * id(Ki);
-              if (iterm > 2) {
-                iterm = 2;
-                integral = 2/id(Ki);
-              } else if (iterm < -2) {
-                iterm = -2;
-                integral = -2/id(Ki);
+              if (iterm > 1) {
+                iterm = 1;
+                integral = 1/id(Ki);
+              } else if (iterm < -1) {
+                iterm = -1;
+                integral = -1/id(Ki);
               }
               derivative = error - last_error;
               last_error = error;
               float control_value = (error*id(Kp))+(iterm)+(id(Kd)*derivative);
             
               // control value clamping
-              if (control_value > 10) control_value = 10;
+              if (control_value > 5) control_value = 5;
               else if(control_value < -5) control_value = -5;
-              temp_new_target = round((x + control_value)*2)/2; // round down to nearest half (0 or 0.5)
-              if(temp_new_target < id(stooklijn_target)) temp_new_target = id(stooklijn_target);
-              else if(temp_new_target > id(stooklijn_target)) temp_new_target = id(stooklijn_target);
+              temp_new_target = round((x + control_value)*2)/2; // round to nearest half (0 or 0.5)
               
-              ESP_LOGD("anti-pendel", "PID error: %f i: %f d: %f P: %f I: %f D: %f U: %f",error,integral,derivative,error*id(Kp),iterm,derivative*id(Kd),control_value);
+              if(id(working_mode) == 1 && temp_new_target < id(stooklijn_target)) temp_new_target = id(stooklijn_target);
+              else if(id(working_mode) == 2 && temp_new_target > id(stooklijn_target)) temp_new_target = id(stooklijn_target);
+              ESP_LOGD("anti-pendel", "%f;%f;%d;%f;%f;%f;%f;%f;%f;%f;%f",id(water_temp_retour).state,x,id(stooklijn_target),temp_new_target,error,integral,derivative,error*id(Kp),iterm,derivative*id(Kd),control_value);
             } else {
               //update pre_run_time counter
               ESP_LOGD("anti-pendel", "Waiting for pre_run_time: %i",pre_run_time);
@@ -370,7 +372,7 @@ sensor:
               id(pendel_watertemp_target).publish_state(id(var_pendel_watertemp_target));
               //update target through modbus (set level needs value between 0-1, so divide by 100)
               id(water_temp_target_output).set_level(id(var_pendel_watertemp_target)*0.01);
-              ESP_LOGD("anti-pendel", "New pendel_watertemp_target set: %f outlet: %f",id(pendel_watertemp_target).state,x);
+              // ESP_LOGD("anti-pendel", "New pendel_watertemp_target set: %f outlet: %f",id(pendel_watertemp_target).state,x);
             }
   - platform: modbus_controller
     modbus_controller_id: lg
