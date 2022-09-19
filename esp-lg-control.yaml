@@ -1,7 +1,7 @@
 esphome:
   name: esp-wp-control
   on_boot:
-    priority: 800
+    priority: 200
     then:
       lambda: !lambda |-
           //set initial states
@@ -124,7 +124,7 @@ switch:
     id: relay1
     interlock: &interlock_group [relay1, relay2]
     interlock_wait_time: 2000ms
-    restore_mode: ALWAYS_OFF
+    restore_mode: RESTORE_DEFAULT_OFF
     on_turn_off:
       then:
         - lambda: |-
@@ -142,7 +142,7 @@ switch:
     id: relay2
     interlock: *interlock_group
     interlock_wait_time: 20s
-    restore_mode: ALWAYS_OFF
+    restore_mode: RESTORE_DEFAULT_OFF
     on_turn_off:
       then:
         - lambda: |-
@@ -343,7 +343,7 @@ sensor:
             if(id(compressor_running).state && !target_reached && delta <= 4){
               temp_new_target = ceil(x*2)/2;
               if(id(working_mode) == 1) temp_new_target++;
-              else if(id(working_mode) == 2) temp_new_target - 1.5;
+              else if(id(working_mode) == 2) temp_new_target = temp_new_target - 1.5;
               //make sure value is not below target (cooling), or above target (heating)
               if(id(working_mode) == 1 && temp_new_target < id(stooklijn_target)) temp_new_target = id(stooklijn_target);
               else if(id(working_mode) == 2 && temp_new_target > id(stooklijn_target)) temp_new_target = id(stooklijn_target);
@@ -420,7 +420,7 @@ sensor:
     unit_of_measurement: "°C"
     value_type: U_WORD
     accuracy_decimals: 1
-    skip_updates: 6
+    skip_updates: 3
     filters:
       - multiply: 0.1
   - platform: template
