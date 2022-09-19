@@ -343,7 +343,7 @@ sensor:
             if(id(compressor_running).state && !target_reached && delta <= 4){
               temp_new_target = ceil(x*2)/2;
               if(id(working_mode) == 1) temp_new_target++;
-              else if(id(working_mode) == 2) temp_new_target--;
+              else if(id(working_mode) == 2) temp_new_target - 1.5;
               //make sure value is not below target (cooling), or above target (heating)
               if(id(working_mode) == 1 && temp_new_target < id(stooklijn_target)) temp_new_target = id(stooklijn_target);
               else if(id(working_mode) == 2 && temp_new_target > id(stooklijn_target)) temp_new_target = id(stooklijn_target);
@@ -354,7 +354,7 @@ sensor:
               pre_run_time--;
             } else if(!target_reached) {
               //waiting for delta te become within range
-              ESP_LOGD("anti-pendel", "Waiting for delta <=4 : %i",delta);
+              ESP_LOGD("anti-pendel", "Waiting for delta RETURN_TEMP: %f OUTLET_TEMP: %f DELTA: %i",id(water_temp_retour).state,x,delta);
             }
             
             if(temp_new_target != id(var_pendel_watertemp_target)){
