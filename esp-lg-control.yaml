@@ -167,6 +167,9 @@ switch:
             // update working mode
             id(working_mode) = 2;
             id(run_start) = true;
+  - platform: output
+    name: "Silent Mode"
+    output: 'modbus_set_silent_mode'
 
 # Eneco Toon anti pendel script. Toon sometimes temporarily switches the output off, while heat is still needed
 # This script delays switching the heating of for x minutes. If heating switches back on within this timeframe the script stops
@@ -206,7 +209,12 @@ output:
     address: 2
     value_type: U_WORD
     multiply: 1000
-
+  - platform: modbus_controller
+    modbus_controller_id: lg
+    id: modbus_set_silent_mode
+    register_type: coil
+    address: 2
+ 
 binary_sensor:
   - platform: gpio # Toon input signal is connected to this input pin
     pin:
