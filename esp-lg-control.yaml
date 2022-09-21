@@ -1,5 +1,8 @@
+substitutions:
+  device_name: esp-wp-control
+
 esphome:
-  name: esp-wp-control
+  name: "${device_name}"
   on_boot:
     priority: 200
     then:
@@ -116,6 +119,16 @@ number:
       then:
         - lambda: |-
             id(force_update_stooklijn) = true;
+  - platform: template
+    id: toon_anti_pendel
+    name: "Toon off delay"
+    min_value: 0
+    max_value: 30
+    step: 1
+    restore_value: yes
+    initial_value: 15
+    unit_of_measurement: "min"
+    optimistic: true
 
 switch:
   - platform: gpio
@@ -156,12 +169,12 @@ switch:
             id(run_start) = true;
 
 # Eneco Toon anti pendel script. Toon sometimes temporarily switches the output off, while heat is still needed
-# This script delays switching the heating of for 5 minutes. If heating switches back on within this timeframe the script stops
+# This script delays switching the heating of for x minutes. If heating switches back on within this timeframe the script stops
 script:
   - id: anti_pendel
     mode: restart
     then:
-      - delay: 300s
+      - delay: !lambda "return id(toon_anti_pendel).state*60*1000;"
       - switch.turn_off: relay2
 
 modbus:
@@ -339,11 +352,11 @@ sensor:
             }
             
             const int delta = abs(id(stooklijn_target)-x);
-            //Run when compressor is running and target not reached and actual temp within 4 degrees of target
-            if(id(compressor_running).state && !target_reached && delta <= 4){
-              temp_new_target = ceil(x*2)/2;
-              if(id(working_mode) == 1) temp_new_target++;
-              else if(id(working_mode) == 2) temp_new_target = temp_new_target - 1.5;
+            //Run when compressor is running and target not reached and actual temp within 3 degrees of target
+            if(id(compressor_running).state && !target_reached && delta <= 3){
+              temp_new_target = x;
+              if(id(working_mode) == 1) temp_new_target = floor((temp_new_target + 1.0)*2)/2;
+              else if(id(working_mode) == 2) temp_new_target = ceil((temp_new_target - 1.5)*2)/2;;
               //make sure value is not below target (cooling), or above target (heating)
               if(id(working_mode) == 1 && temp_new_target < id(stooklijn_target)) temp_new_target = id(stooklijn_target);
               else if(id(working_mode) == 2 && temp_new_target > id(stooklijn_target)) temp_new_target = id(stooklijn_target);
@@ -437,3 +450,23 @@ sensor:
     update_interval: 3600s
     lambda: |-
         return round(id(var_pendel_watertemp_target)*10)/10;
+  - platform: wifi_signal
+    name: "${device_name} WiFi Signal"
+    update_interval: 120s
+    accuracy_decimals: 0
+  - platform: uptime
+    name: "${device_name} Uptime"
+    unit_of_measurement: days
+    update_interval: 3600s
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.000011574
+# Sensors for ESP version and WIFI information
+text_sensor:
+  - platform: version
+    name: "${device_name} ESPHome Version"
+  - platform: wifi_info
+    ip_address:
+      name: "${device_name} ip"
+    ssid:
+      name: "${device_name} ssid"
