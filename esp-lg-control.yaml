@@ -70,7 +70,7 @@ number:
     max_value: 0
     step: 1
     restore_value: yes
-    initial_value: -15
+    initial_value: -20
     unit_of_measurement: "°C"
     optimistic: true
     set_action:
@@ -84,7 +84,7 @@ number:
     max_value: 60
     step: 1
     restore_value: yes
-    initial_value: 55
+    initial_value: 50
     unit_of_measurement: "°C"
     optimistic: true
     set_action:
@@ -98,7 +98,7 @@ number:
     max_value: 35
     step: 1
     restore_value: yes
-    initial_value: 20
+    initial_value: 28
     unit_of_measurement: "°C"
     optimistic: true
     set_action:
@@ -332,6 +332,9 @@ sensor:
                   oat = 20;
                 }
                 id(stooklijn_target) = (int)round((Z * (oat-20))+20);
+                //add stooklijn offset
+                id(stooklijn_target) = id(stooklijn_target) + id(wp_stooklijn_offset).state;
+                //
                 if(id(stooklijn_target) > id(stooklijn_max_wtemp).state) id(stooklijn_target) = id(stooklijn_max_wtemp).state;
                 //minimum water temp when in heating mode (in case of radiators)
                 if(id(stooklijn_target) < id(stooklijn_min_wtemp).state) id(stooklijn_target) = id(stooklijn_min_wtemp).state;
@@ -378,6 +381,11 @@ sensor:
               ESP_LOGD("anti-pendel", "Waiting for delta RETURN_TEMP: %f OUTLET_TEMP: %f DELTA: %i",id(water_temp_retour).state,x,delta);
             }
             
+            //make sure changes in stooklijn are processed when target reached
+            if(target_reached){
+                temp_new_target = id(stooklijn_target);
+            }
+
             if(temp_new_target != id(var_pendel_watertemp_target)){
               //set new target
               id(var_pendel_watertemp_target) = temp_new_target;
