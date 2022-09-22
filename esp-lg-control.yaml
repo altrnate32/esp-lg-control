@@ -263,6 +263,17 @@ binary_sensor:
 sensor:
   - platform: modbus_controller
     modbus_controller_id: lg
+    name: "Buitentemperatuur"
+    id: buiten_temp
+    register_type: read
+    address: 12
+    unit_of_measurement: "°C"
+    value_type: U_WORD
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1
+  - platform: modbus_controller
+    modbus_controller_id: lg
     name: "Water retour"
     id: water_temp_retour
     register_type: read
@@ -294,7 +305,8 @@ sensor:
               ESP_LOGD("anti-pendel", "**alive** oat: %f inlet: %f outlet: %f ",id(buiten_temp).state,id(water_temp_retour).state,x);
             }
             alive_timer--;
-            
+            //wait for valid oat reading
+            if(isnan(id(buiten_temp).state)) return;
             //Do not run script if working mode = 0
             if(id(working_mode) == 0) return;
             
@@ -302,8 +314,6 @@ sensor:
             static float prev_oat = 0;
             //pre run time
             static int pre_run_time = 0;
-            //new anti-pendel target
-            float temp_new_target = id(var_pendel_watertemp_target);
             //system logic (to switch off after target is reached)
             static bool target_reached = false;
             
@@ -343,7 +353,8 @@ sensor:
               //publish new stooklijn value to watertemp value sensor
               id(watertemp_target).publish_state(id(stooklijn_target));
             }
-          
+            //new anti-pendel target
+            float temp_new_target = id(var_pendel_watertemp_target);
             // calculate new (anti pendel) target
             // very basic algorithm
             // it initializes at the start of a run (when working mode changes tot 1 or 2)
@@ -358,8 +369,10 @@ sensor:
               target_reached = false;
               //Set initial target to trigger compressor startup (set level needs value between 0-1, so divide by 100)
               id(var_pendel_watertemp_target) = id(stooklijn_target);
+              temp_new_target = id(stooklijn_target);
               id(water_temp_target_output).set_level(id(stooklijn_target)*0.01);
-              ESP_LOGD("anti-pendel", "Modbus initial target set: %f outlet: %f",id(stooklijn_target),x);
+              id(pendel_watertemp_target).publish_state(id(var_pendel_watertemp_target));
+              ESP_LOGD("anti-pendel", "Run start initial values set; target: %f outlet: %f",id(stooklijn_target),x);
               id(run_start) = 0;
             }
             
@@ -419,17 +432,6 @@ sensor:
     register_type: read
     address: 8
     unit_of_measurement: "L/m"
-    value_type: U_WORD
-    accuracy_decimals: 1
-    filters:
-      - multiply: 0.1
-  - platform: modbus_controller
-    modbus_controller_id: lg
-    name: "Buitentemperatuur"
-    id: buiten_temp
-    register_type: read
-    address: 12
-    unit_of_measurement: "°C"
     value_type: U_WORD
     accuracy_decimals: 1
     filters:
