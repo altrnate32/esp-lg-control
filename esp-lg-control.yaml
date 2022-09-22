@@ -357,6 +357,7 @@ sensor:
               //activate system
               target_reached = false;
               //Set initial target to trigger compressor startup (set level needs value between 0-1, so divide by 100)
+              id(var_pendel_watertemp_target) = id(stooklijn_target);
               id(water_temp_target_output).set_level(id(stooklijn_target)*0.01);
               ESP_LOGD("anti-pendel", "Modbus initial target set: %f outlet: %f",id(stooklijn_target),x);
               id(run_start) = 0;
