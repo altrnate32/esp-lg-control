@@ -8,13 +8,17 @@ esphome:
     then:
       lambda: !lambda |-
           //set initial states
+          id(force_update_stooklijn) = true;
+          id(run_start) = false;
+          id(minimum_run_time_passed) = false;
+          id(switch_off_requested) = false;
           id(relay1).turn_off();
           if (id(toon_signal).state) {
             id(relay2).turn_on();
           } else {
             id(relay2).turn_off();
           }
-
+          
 packages:
   config_values: !include config/config.yaml
 
@@ -30,7 +34,7 @@ globals:
   - id: stooklijn_target
     type: float
     restore_value: no
-    initial_value: '26'
+    initial_value: '28'
   - id: force_update_stooklijn
     type: bool
     restore_value: no
@@ -42,12 +46,19 @@ globals:
   - id: var_pendel_watertemp_target
     type: float
     restore_value: no
-    initial_value: '26'
+    initial_value: '28'
   - id: run_start
     type: bool
     restore_value: no
     initial_value: 'false'
-
+  - id: minimum_run_time_passed
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+  - id: switch_off_requested
+    type: bool
+    restore_value: no
+    initial_value: 'false'
 number:
   - platform: template
     name: "Stooklijn offset"
@@ -98,7 +109,7 @@ number:
     max_value: 35
     step: 1
     restore_value: yes
-    initial_value: 26
+    initial_value: 28
     unit_of_measurement: "°C"
     optimistic: true
     set_action:
@@ -120,13 +131,23 @@ number:
         - lambda: |-
             id(force_update_stooklijn) = true;
   - platform: template
-    id: toon_off_delay
-    name: "Toon off delay"
+    id: minimum_run_time
+    name: "Minimale run tijd"
     min_value: 0
     max_value: 30
     step: 1
     restore_value: yes
     initial_value: 15
+    unit_of_measurement: "min"
+    optimistic: true
+  - platform: template
+    id: toon_off_delay
+    name: "Toon off delay"
+    min_value: 0
+    max_value: 10
+    step: 1
+    restore_value: yes
+    initial_value: 3
     unit_of_measurement: "min"
     optimistic: true
   - platform: template
@@ -159,6 +180,9 @@ switch:
             // update working mode
             id(working_mode) = 1;
             id(run_start) = true;
+            // cooling mode is not controlled by Toon, so no minimum run time applicable
+            id(minimum_run_time_passed) = true;
+            id(switch_off_requested) = false;            
   - platform: gpio
     name: "WP Heat"
     pin: 19
@@ -177,6 +201,9 @@ switch:
             // update working mode
             id(working_mode) = 2;
             id(run_start) = true;
+            id(minimum_run_time_passed) = false;
+            id(switch_off_requested) = false;
+            id(minimum_run_time_script).execute();
   - platform: output
     name: "Silent Mode"
     output: 'modbus_set_silent_mode'
@@ -189,13 +216,34 @@ script:
     mode: restart
     then:
       - delay: !lambda "return id(toon_off_delay).state*60*1000;"
-      - switch.turn_off: relay2
+      - lambda: |-
+          //if minimum run time passed switch off. Otherwise flag switch off requested (will be picked up by minimum_run_time_script)
+          if(id(minimum_run_time_passed)){
+            id(relay2).turn_off();
+          } else {
+            id(switch_off_requested) = true;
+          }
   - id: anti_pendel_on
     mode: restart
     then:
       - delay: !lambda "return id(toon_on_delay).state*60*1000;"
-      - switch.turn_on: relay2
-
+      - lambda: |-
+          // turn on HP
+          id(relay2).turn_on();
+  - id: minimum_run_time_script
+    mode: restart
+    then:
+      - delay: !lambda "return id(minimum_run_time).state*60*1000;"
+      - lambda: |-
+          //set minum run time passed to true, so that HP can switch off when Toon switches off (after delay)
+          id(minimum_run_time_passed) = true;
+          // check if switch off was already requested
+          if(id(switch_off_requested)){
+            //switch off
+            id(relay2).turn_off();
+            id(anti_pendel_off).stop();
+          }
+          
 modbus:
   id: modbus_lg
   uart_id: uart_modbus
@@ -243,7 +291,11 @@ binary_sensor:
     filters:
       - delayed_on: 500ms # Debounce
     on_press:
-      - script.execute: anti_pendel_on # Anti pendel script, to delay switch on for x minutes 
+      # Reset switch_off_requested
+      - globals.set:
+          id: switch_off_requested
+          value: 'false'
+      - script.execute: anti_pendel_on # Anti pendel script, to delay switch on for x minutes
       - script.stop: anti_pendel_off # Anti pendel script, to delay switch off for x minutes
     on_release:
       - script.execute: anti_pendel_off
