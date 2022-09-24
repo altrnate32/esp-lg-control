@@ -30,7 +30,7 @@ globals:
   - id: stooklijn_target
     type: float
     restore_value: no
-    initial_value: '30'
+    initial_value: '26'
   - id: force_update_stooklijn
     type: bool
     restore_value: no
@@ -42,7 +42,7 @@ globals:
   - id: var_pendel_watertemp_target
     type: float
     restore_value: no
-    initial_value: '30'
+    initial_value: '26'
   - id: run_start
     type: bool
     restore_value: no
@@ -80,11 +80,11 @@ number:
   - platform: template
     id: stooklijn_max_wtemp
     name: "Stooklijn Maximum Watertemperatuur"
-    min_value: 40
+    min_value: 30
     max_value: 60
     step: 1
     restore_value: yes
-    initial_value: 50
+    initial_value: 40
     unit_of_measurement: "°C"
     optimistic: true
     set_action:
@@ -98,7 +98,7 @@ number:
     max_value: 35
     step: 1
     restore_value: yes
-    initial_value: 28
+    initial_value: 26
     unit_of_measurement: "°C"
     optimistic: true
     set_action:
@@ -120,13 +120,23 @@ number:
         - lambda: |-
             id(force_update_stooklijn) = true;
   - platform: template
-    id: toon_anti_pendel
+    id: toon_off_delay
     name: "Toon off delay"
     min_value: 0
     max_value: 30
     step: 1
     restore_value: yes
     initial_value: 15
+    unit_of_measurement: "min"
+    optimistic: true
+  - platform: template
+    id: toon_on_delay
+    name: "Toon on delay"
+    min_value: 0
+    max_value: 10
+    step: 1
+    restore_value: yes
+    initial_value: 3
     unit_of_measurement: "min"
     optimistic: true
 
@@ -173,12 +183,18 @@ switch:
 
 # Eneco Toon anti pendel script. Toon sometimes temporarily switches the output off, while heat is still needed
 # This script delays switching the heating of for x minutes. If heating switches back on within this timeframe the script stops
+# An other 'nice' feature of Toon is that it sometimes switches on the heating for only 1 or 2 minutes and then off again
 script:
-  - id: anti_pendel
+  - id: anti_pendel_off
     mode: restart
     then:
-      - delay: !lambda "return id(toon_anti_pendel).state*60*1000;"
+      - delay: !lambda "return id(toon_off_delay).state*60*1000;"
       - switch.turn_off: relay2
+  - id: anti_pendel_on
+    mode: restart
+    then:
+      - delay: !lambda "return id(toon_on_delay).state*60*1000;"
+      - switch.turn_on: relay2
 
 modbus:
   id: modbus_lg
@@ -227,10 +243,11 @@ binary_sensor:
     filters:
       - delayed_on: 500ms # Debounce
     on_press:
-      - switch.turn_on: relay2
-      - script.stop: anti_pendel # Anti pendel script, to delay switch off for 5 minutes
+      - script.execute: anti_pendel_on # Anti pendel script, to delay switch on for x minutes 
+      - script.stop: anti_pendel_off # Anti pendel script, to delay switch off for x minutes
     on_release:
-      - script.execute: anti_pendel
+      - script.execute: anti_pendel_off
+      - script.stop: anti_pendel_on
   - platform: modbus_controller
     modbus_controller_id: lg
     name: "Silent Mode"
