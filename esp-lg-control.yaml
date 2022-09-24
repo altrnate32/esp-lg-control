@@ -34,7 +34,7 @@ globals:
   - id: stooklijn_target
     type: float
     restore_value: no
-    initial_value: '28'
+    initial_value: '24'
   - id: force_update_stooklijn
     type: bool
     restore_value: no
@@ -46,7 +46,7 @@ globals:
   - id: var_pendel_watertemp_target
     type: float
     restore_value: no
-    initial_value: '28'
+    initial_value: '24'
   - id: run_start
     type: bool
     restore_value: no
@@ -109,7 +109,7 @@ number:
     max_value: 35
     step: 1
     restore_value: yes
-    initial_value: 28
+    initial_value: 24
     unit_of_measurement: "°C"
     optimistic: true
     set_action:
@@ -215,9 +215,12 @@ script:
   - id: anti_pendel_off
     mode: restart
     then:
+      - lambda: |-
+          ESP_LOGD("toon-delay", "anti_pendel_off called starting delay timer. minimum_run_time_passed: %d",id(minimum_run_time_passed));
       - delay: !lambda "return id(toon_off_delay).state*60*1000;"
       - lambda: |-
           //if minimum run time passed switch off. Otherwise flag switch off requested (will be picked up by minimum_run_time_script)
+          ESP_LOGD("toon-delay", "anti_pendel_off delay passed. minimum_run_time_passed: %d",id(minimum_run_time_passed));
           if(id(minimum_run_time_passed)){
             id(relay2).turn_off();
           } else {
@@ -226,16 +229,22 @@ script:
   - id: anti_pendel_on
     mode: restart
     then:
+      - lambda: |-
+          ESP_LOGD("toon-delay", "anti_pendel_on called starting delay timer.");
       - delay: !lambda "return id(toon_on_delay).state*60*1000;"
       - lambda: |-
+          ESP_LOGD("toon-delay", "anti_pendel_on delay passed starting HP.");
           // turn on HP
           id(relay2).turn_on();
   - id: minimum_run_time_script
     mode: restart
     then:
+      - lambda: |-
+          ESP_LOGD("toon-delay", "minimum_run_time_script called starting delay timer.");
       - delay: !lambda "return id(minimum_run_time).state*60*1000;"
       - lambda: |-
           //set minum run time passed to true, so that HP can switch off when Toon switches off (after delay)
+          ESP_LOGD("toon-delay", "minimum_run_time_script delay passed. switch_off_requested: %d",id(switch_off_requested));
           id(minimum_run_time_passed) = true;
           // check if switch off was already requested
           if(id(switch_off_requested)){
@@ -368,6 +377,7 @@ sensor:
         - lambda: |-
             //Main program logic this loop runs every 'clock' cycle when modbus data is received for this sensor
             static int alive_timer = 0;
+            const static int hysteresis = 2;
             if(alive_timer == 0){
               // post an 'alive' debug message in the logs every 300 seconds
               alive_timer = 16; //300 seconds
@@ -426,14 +436,16 @@ sensor:
             float temp_new_target = id(var_pendel_watertemp_target);
             // calculate new (anti pendel) target
             // very basic algorithm
+            // After testing it looks like modulation is triggered by return temp and not by supply temp
+            // Supply temp will trigger a shut down of the compressor, but does not seem te trigger modulation
             // it initializes at the start of a run (when working mode changes tot 1 or 2)
             // then sets initial target to 'real' target, to allow HP to start up
-            // when the compressor turn on the logic start running, setting a new target at -1 degrees below actual when actual within 4 degrees of target
+            // when the compressor turn on the logic start running, setting a new target at 1 degrees below actual return temp when actual within hysteresis-1 degrees of target
             // when the new target equals the new target the logic stops, so the HP can take over again an run its own logic
             // system resets at heating/cooling mode stop (system working mode 0) for example when the room thermostat stops the heating
             if(id(run_start)){
               //initialize values. run_start is set to true by the switches that control heating/cooling mode
-              pre_run_time = 4; // equals 80 seconds. Based on 20s 'clock'
+              pre_run_time = 5; // equals 100 seconds. Based on 20s 'clock'
               //activate system
               target_reached = false;
               //Set initial target to trigger compressor startup (set level needs value between 0-1, so divide by 100)
@@ -444,16 +456,18 @@ sensor:
               ESP_LOGD("anti-pendel", "Run start initial values set; target: %f outlet: %f",id(stooklijn_target),x);
               id(run_start) = 0;
             }
-            
-            const int delta = abs(id(stooklijn_target)-x);
-            //Run when compressor is running and target not reached and actual temp within 3 degrees of target
-            if(id(compressor_running).state && !target_reached && delta <= 3){
-              temp_new_target = x;
-              if(id(working_mode) == 1) temp_new_target = floor((temp_new_target + 1.0)*2)/2;
-              else if(id(working_mode) == 2) temp_new_target = ceil((temp_new_target - 1.5)*2)/2;;
-              //make sure value is not below target (cooling), or above target (heating)
+            //wait for valid water temp return reading
+            if(isnan(id(water_temp_retour).state)) return;
+            temp_new_target = id(water_temp_retour).state;
+            //system will only run when delta return vs target is < hysteresis+2 to prevent triggering a switch off
+            const float delta = abs(id(stooklijn_target)-id(water_temp_retour).state);
+            //Run when compressor is running and target not reached and actual return temp within hysteresis+2 degrees of target
+            if(id(compressor_running).state && !target_reached && delta < (hysteresis+2)){
+              if(id(working_mode) == 1) temp_new_target = ceil((temp_new_target+hysteresis)*2)/2;
+              else if(id(working_mode) == 2) temp_new_target = floor((temp_new_target-(hysteresis))*2)/2;
+              //make sure value is not below target (cooling), or above target (heating) and make sure pendel target is not below hysteresis of output temp
               if(id(working_mode) == 1 && temp_new_target < id(stooklijn_target)) temp_new_target = id(stooklijn_target);
-              else if(id(working_mode) == 2 && temp_new_target > id(stooklijn_target)) temp_new_target = id(stooklijn_target);
+              else if(temp_new_target > id(stooklijn_target)) temp_new_target = id(stooklijn_target);
               ESP_LOGD("anti-pendel", "RETURN_TEMP: %f OUTLET_TEMP: %f TARGET: %f PENDEL_TARGET: %f",id(water_temp_retour).state,x,id(stooklijn_target),temp_new_target);
             } else if(!target_reached && pre_run_time > 0) {
               //update pre_run_time counter
@@ -461,7 +475,14 @@ sensor:
               pre_run_time--;
             } else if(!target_reached) {
               //waiting for delta te become within range
-              ESP_LOGD("anti-pendel", "Waiting for delta RETURN_TEMP: %f OUTLET_TEMP: %f DELTA: %i",id(water_temp_retour).state,x,delta);
+              if(id(working_mode) == 1) {
+                temp_new_target = ceil((temp_new_target-hysteresis)*2)/2;
+                if(temp_new_target < id(stooklijn_target)) temp_new_target = id(stooklijn_target);
+              } else if(id(working_mode) == 2){
+                temp_new_target = floor((temp_new_target+hysteresis)*2)/2;
+                if(temp_new_target > id(stooklijn_target)) temp_new_target = id(stooklijn_target);
+              }
+              ESP_LOGD("anti-pendel", "Waiting for delta RETURN_TEMP: %f OUTLET_TEMP: %f DELTA: %f PENDEL_TARGET: %f",id(water_temp_retour).state,x,delta,temp_new_target);
             }
             
             //make sure changes in stooklijn are processed when target reached
