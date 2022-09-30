@@ -320,13 +320,6 @@ binary_sensor:
       - script.stop: anti_pendel_on
   - platform: modbus_controller
     modbus_controller_id: lg
-    name: "Silent Mode"
-    id: silent_mode
-    register_type: discrete_input
-    skip_updates: 3
-    address: 7
-  - platform: modbus_controller
-    modbus_controller_id: lg
     name: "Pump Running"
     id: pump_running
     register_type: discrete_input
@@ -344,21 +337,25 @@ binary_sensor:
     name: "Defrosting"
     id: defrosting
     register_type: discrete_input
-    skip_updates: 3
+    skip_updates: 6
     address: 4
+  - platform: modbus_controller
+    modbus_controller_id: lg
+    name: "Silent Mode"
+    id: silent_mode
+    register_type: discrete_input
+    skip_updates: 6
+    address: 7
+
     
 sensor:
   - platform: modbus_controller
     modbus_controller_id: lg
-    name: "Buitentemperatuur"
-    id: buiten_temp
+    name: "Bedrijfsmodus"
+    id: bedrijfsmodus
     register_type: read
-    address: 12
-    unit_of_measurement: "°C"
+    address: 1
     value_type: U_WORD
-    accuracy_decimals: 1
-    filters:
-      - multiply: 0.1
   - platform: modbus_controller
     modbus_controller_id: lg
     name: "Water retour"
@@ -539,11 +536,24 @@ sensor:
       - multiply: 0.1
   - platform: modbus_controller
     modbus_controller_id: lg
-    name: "Bedrijfsmodus"
-    id: bedrijfsmodus
+    name: "Buitentemperatuur"
+    id: buiten_temp
     register_type: read
-    address: 1
+    address: 12
+    unit_of_measurement: "°C"
     value_type: U_WORD
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1
+  - platform: modbus_controller
+    modbus_controller_id: lg
+    name: "Compressor RPM"
+    id: compressor_rpm
+    register_type: read
+    address: 24
+    unit_of_measurement: "RPM"
+    value_type: U_WORD
+    accuracy_decimals: 0
   - platform: modbus_controller
     modbus_controller_id: lg
     name: "Doeltemperatuur"
