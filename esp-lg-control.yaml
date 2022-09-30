@@ -467,8 +467,8 @@ sensor:
             //Run when compressor is running and target not reached and actual return temp within hysteresis degrees of target
             if(id(compressor_running).state && !target_reached && delta < (hysteresis)){
               //Agressive target setting
-              if(id(working_mode) == 1) temp_new_target = (((tracking_value+2)*10)/10;
-              else if(id(working_mode) == 2) temp_new_target = (((tracking_value-2)*10)/10;
+              if(id(working_mode) == 1) temp_new_target = ((tracking_value+2)*10)/10;
+              else if(id(working_mode) == 2) temp_new_target = ((tracking_value-2)*10)/10;
               //Make sure value is not below target (cooling), or above target (heating)
               if(id(working_mode) == 1 && temp_new_target < id(stooklijn_target)) temp_new_target = id(stooklijn_target);
               else if(temp_new_target > id(stooklijn_target)) temp_new_target = id(stooklijn_target);
