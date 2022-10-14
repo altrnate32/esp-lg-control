@@ -13,8 +13,9 @@ esphome:
           id(minimum_run_time_passed) = false;
           id(switch_off_requested) = false;
           id(relay1).turn_off();
-          if (id(toon_signal).state) {
+          if (id(thermostat_signal).state) {
             id(relay2).turn_on();
+            id(relay1).turn_on();
           } else {
             id(relay2).turn_off();
           }
@@ -134,21 +135,6 @@ number:
       then:
         - lambda: |-
             id(force_update_stooklijn) = true;
-
-  - platform: template
-    id: cooling_target_wtemp
-    name: "Koelmodus Watertemperatuur"
-    min_value: 16
-    max_value: 20
-    step: 1
-    restore_value: yes
-    initial_value: 18
-    unit_of_measurement: "°C"
-    optimistic: true
-    set_action:
-      then:
-        - lambda: |-
-            id(force_update_stooklijn) = true;
   - platform: template
     id: minimum_run_time
     name: "Minimale run tijd"
@@ -160,57 +146,45 @@ number:
     unit_of_measurement: "min"
     optimistic: true
   - platform: template
-    id: toon_off_delay
-    name: "Toon off delay"
+    id: thermostat_off_delay
+    name: "thermostat off delay"
     min_value: 0
     max_value: 10
     step: 1
     restore_value: yes
-    initial_value: 3
+    initial_value: 1
     unit_of_measurement: "min"
     optimistic: true
   - platform: template
-    id: toon_on_delay
-    name: "Toon on delay"
+    id: thermostat_on_delay
+    name: "thermostat on delay"
     min_value: 0
     max_value: 10
     step: 1
     restore_value: yes
-    initial_value: 3
+    initial_value: 0
     unit_of_measurement: "min"
     optimistic: true
-
+  - platform: template
+    id: external_pump_runover
+    name: "External pump overrun"
+    min_value: 0
+    max_value: 60
+    step: 1
+    restore_value: yes
+    initial_value: 20
+    unit_of_measurement: "min"
+    optimistic: true
 switch:
   - platform: gpio
-    name: "WP Cool"
+    name: "WP External Pump"
     pin: 18
     id: relay1
-    interlock: &interlock_group [relay1, relay2]
-    interlock_wait_time: 2000ms
     restore_mode: RESTORE_DEFAULT_OFF
-    on_turn_off:
-      then:
-        - lambda: |-
-            //Update working mode
-            id(working_mode) = 0;
-            id(modulation_start_script).stop();
-    on_turn_on:
-      then:
-        - lambda: |-
-            //Update working mode
-            id(working_mode) = 1;
-            id(run_start) = true;
-            // cooling mode is not controlled by Toon, so no minimum run time applicable
-            id(minimum_run_time_passed) = true;
-            id(switch_off_requested) = false;
-            id(modulation_started) = false;
-            id(modulation_start_script).execute();
   - platform: gpio
     name: "WP Heat"
     pin: 19
     id: relay2
-    interlock: *interlock_group
-    interlock_wait_time: 20s
     restore_mode: RESTORE_DEFAULT_OFF
     on_turn_off:
       then:
@@ -220,9 +194,14 @@ switch:
             id(minimum_run_time_script).stop();
             id(anti_pendel_off).stop();
             id(modulation_start_script).stop();
+            id(external_pump_script).execute();
     on_turn_on:
       then:
         - lambda: |-
+            //Turn on external pump
+            id(relay1).turn_on();
+            //stop the script that stops the pump after x minutes
+            id(external_pump_script).stop();
             //Update working mode
             id(working_mode) = 2;
             id(run_start) = true;
@@ -235,7 +214,7 @@ switch:
     name: "Silent Mode"
     output: 'modbus_set_silent_mode'
 
-# Eneco Toon anti pendel script. Toon sometimes temporarily switches the output off, while heat is still needed
+# External thermostat anti pendel script. Some thermostats (Eneco Toon is really bad) sometimes temporarily switches the output off, while heat is still needed
 # This script delays switching the heating of for x minutes. If heating switches back on within this timeframe the script stops
 # An other 'nice' feature of Toon is that it sometimes switches on the heating for only 1 or 2 minutes and then off again
 script:
@@ -243,18 +222,18 @@ script:
     mode: restart
     then:
       - lambda: |-
-          ESP_LOGD("toon-delay", "anti_pendel_off called.");
+          ESP_LOGD("thermostat-delay", "anti_pendel_off called.");
           //If heating active and compressor is not running, switch off instantly
           if(!id(compressor_running).state && id(working_mode) == 2){
-            ESP_LOGD("toon-delay", "Compressor not running. Instant off.");
+            ESP_LOGD("thermostat-delay", "Compressor not running. Instant off.");
             id(relay2).turn_off();
           }else {
-            ESP_LOGD("toon-delay", "anti_pendel_off called. starting delay timer. minimum_run_time_passed: %d",id(minimum_run_time_passed));
+            ESP_LOGD("thermostat-delay", "anti_pendel_off called. starting delay timer. minimum_run_time_passed: %d",id(minimum_run_time_passed));
           }
-      - delay: !lambda "return id(toon_off_delay).state*60*1000;"
+      - delay: !lambda "return id(thermostat_off_delay).state*60*1000;"
       - lambda: |-
           //If minimum run time passed switch off. Otherwise flag switch off requested (will be picked up by minimum_run_time_script)
-          ESP_LOGD("toon-delay", "anti_pendel_off delay passed. minimum_run_time_passed: %d",id(minimum_run_time_passed));
+          ESP_LOGD("thermostat-delay", "anti_pendel_off delay passed. minimum_run_time_passed: %d",id(minimum_run_time_passed));
           if(id(minimum_run_time_passed)||(!id(compressor_running).state && id(working_mode) == 2)){
             id(relay2).turn_off();
           } else {
@@ -264,21 +243,21 @@ script:
     mode: restart
     then:
       - lambda: |-
-          ESP_LOGD("toon-delay", "anti_pendel_on called starting delay timer.");
-      - delay: !lambda "return id(toon_on_delay).state*60*1000;"
+          ESP_LOGD("thermostat-delay", "anti_pendel_on called starting delay timer.");
+      - delay: !lambda "return id(thermostat_on_delay).state*60*1000;"
       - lambda: |-
-          ESP_LOGD("toon-delay", "anti_pendel_on delay passed starting HP.");
+          ESP_LOGD("thermostat-delay", "anti_pendel_on delay passed starting HP.");
           //Turn on HP
           id(relay2).turn_on();
   - id: minimum_run_time_script
     mode: restart
     then:
       - lambda: |-
-          ESP_LOGD("toon-delay", "minimum_run_time_script called starting delay timer.");
+          ESP_LOGD("thermostat-delay", "minimum_run_time_script called starting delay timer.");
       - delay: !lambda "return id(minimum_run_time).state*60*1000;"
       - lambda: |-
-          //Set minum run time passed to true, so that HP can switch off when Toon switches off (after delay)
-          ESP_LOGD("toon-delay", "minimum_run_time_script delay passed. switch_off_requested: %d",id(switch_off_requested));
+          //Set minum run time passed to true, so that HP can switch off when thermostat switches off (after delay)
+          ESP_LOGD("thermostat-delay", "minimum_run_time_script delay passed. switch_off_requested: %d",id(switch_off_requested));
           id(minimum_run_time_passed) = true;
           //Check if switch off was already requested
           if(id(switch_off_requested)){
@@ -289,12 +268,19 @@ script:
   - id: modulation_start_script
     mode: restart
     then:
-      - delay: !lambda "return 15*60*1000;"
+      - delay: !lambda "return id(external_pump_runover).state*60*1000;"
       - lambda: |-
           //Set modulation_started to true
           id(modulation_started) = true;
           ESP_LOGD("anti-pendel", "Modulation_started = true.");
-          
+  - id: external_pump_script
+    mode: restart
+    then:
+      - delay: !lambda "return 15*60*1000;"
+      - lambda: |-
+          //switch off pump after delay time
+          id(relay1).turn_off();
+                  
 modbus:
   id: modbus_lg
   uart_id: uart_modbus
@@ -331,14 +317,14 @@ output:
     address: 2
  
 binary_sensor:
-  - platform: gpio # Toon input signal is connected to this input pin
+  - platform: gpio # Thermostat input signal is connected to this input pin
     pin:
       number: GPIO27
       mode:
         input: true
         pullup: false
-    name: "WP Toon Signal"
-    id: toon_signal
+    name: "WP Nest Signal"
+    id: thermostat_signal
     filters:
       - delayed_on: 500ms # Debounce
     on_press:
@@ -418,7 +404,7 @@ sensor:
             static int alive_timer = 0;
             
             //Set controller control mode to 'outlet' and set hysteresis to the setting you have on the controller (recommend 4)
-            const static int hysteresis = 4;
+            const static int hysteresis = 3;
             //The algoritm will allow an overshoot (over the hysteresis) for the first 15 minutes to not kill an ongoing run that is about to start modulating
             //Rather settle at a slightly higher temperature than start 'pendeling'
             const static int max_overshoot = 2; //So maximum overshoot of hysteresis + max_overshoot
@@ -451,30 +437,25 @@ sensor:
               prev_oat = oat;
               //reset force boolean
               id(force_update_stooklijn) = false;
-              if(id(working_mode) == 1){
-                //Cooling
-                ESP_LOGD("stooklijn", "Stooklijn, working mode is cooling");
-                id(stooklijn_target) = id(cooling_target_wtemp).state;
-              } else {
-                //Heating
-                //Formula is wTemp = -Z x (OAT-stooklijn_min_wtemp) + stooklijn_start_temp
-                //Formula to calculate -Z = ((stooklijn_max_wtemp-stooklijn_min_wtemp)) / (stooklijn_min_oat - stooklijn_start_temp))
-                const float Z = ((float)id(stooklijn_max_wtemp).state-(float)id(stooklijn_min_wtemp).state)/( (float)id(stooklijn_min_oat).state - (float)id(stooklijn_start_temp).state);
-                ESP_LOGD("stooklijn", "Stooklijn, working mode is heating, with oat: %f, Z: %f",oat, Z);
-                if(oat < id(stooklijn_min_oat).state) {
-                  //If oat below minimum oat, clamp to minimum value
-                  oat = id(stooklijn_min_oat).state;
-                } else if (oat > id(stooklijn_start_temp).state) {
-                  //If oat above max value, clamp to maximum value
-                  oat = id(stooklijn_start_temp).state;
-                }
-                id(stooklijn_target) = (int)round((Z * (oat-id(stooklijn_min_wtemp).state))+id(stooklijn_start_temp).state);
-                //Add stooklijn offset
-                id(stooklijn_target) = id(stooklijn_target) + id(wp_stooklijn_offset).state;
-                //Make sure target is not above max water or below minimum temp
-                if(id(stooklijn_target) > id(stooklijn_max_wtemp).state) id(stooklijn_target) = id(stooklijn_max_wtemp).state;
-                if(id(stooklijn_target) < id(stooklijn_min_wtemp).state) id(stooklijn_target) = id(stooklijn_min_wtemp).state;
+              //Heating
+              //Formula is wTemp = -Z x (OAT-stooklijn_min_wtemp) + stooklijn_start_temp
+              //Formula to calculate -Z = ((stooklijn_max_wtemp-stooklijn_min_wtemp)) / (stooklijn_min_oat - stooklijn_start_temp))
+              const float Z = ((float)id(stooklijn_max_wtemp).state-(float)id(stooklijn_min_wtemp).state)/( (float)id(stooklijn_min_oat).state - (float)id(stooklijn_start_temp).state);
+              ESP_LOGD("stooklijn", "Stooklijn, working mode is heating, with oat: %f, Z: %f",oat, Z);
+              if(oat < id(stooklijn_min_oat).state) {
+                //If oat below minimum oat, clamp to minimum value
+                oat = id(stooklijn_min_oat).state;
+              } else if (oat > id(stooklijn_start_temp).state) {
+                //If oat above max value, clamp to maximum value
+                oat = id(stooklijn_start_temp).state;
               }
+              id(stooklijn_target) = (int)round((Z * (oat-id(stooklijn_min_wtemp).state))+id(stooklijn_start_temp).state);
+              //Add stooklijn offset
+              id(stooklijn_target) = id(stooklijn_target) + id(wp_stooklijn_offset).state;
+              //Make sure target is not above max water or below minimum temp
+              if(id(stooklijn_target) > id(stooklijn_max_wtemp).state) id(stooklijn_target) = id(stooklijn_max_wtemp).state;
+              if(id(stooklijn_target) < id(stooklijn_min_wtemp).state) id(stooklijn_target) = id(stooklijn_min_wtemp).state;
+              
               ESP_LOGD("stooklijn", "New stooklijn target value (after correction): %f", id(stooklijn_target));
               //Publish new stooklijn value to watertemp value sensor
               id(watertemp_target).publish_state(id(stooklijn_target));
@@ -487,9 +468,9 @@ sensor:
             //Then sets initial target to 'real' target, to allow HP to start up (if water temp below HP hysteresis setting)
             //When the compressor turns on the logic starts running, setting a new target at 2 degrees below actual return temp when actual within hysteresis degrees of target
             //When the new target equals the target temperature the logic stops, fixating the target so the HP can take over again an run its own logic
-            //System resets at heating/cooling mode stop (system working mode 0) for example when the room thermostat stops the heating
+            //System resets at heating mode stop (system working mode 0) for example when the room thermostat stops the heating
             if(id(run_start)){
-              //Initialize values. run_start is set to true by the switches that control heating/cooling mode
+              //Initialize values. run_start is set to true by the switches that control heating mode
               pre_run_time = 5; // equals 100 seconds. Based on 20s 'clock'
               //Activate system
               target_reached = false;
@@ -499,25 +480,18 @@ sensor:
               id(run_start) = 0;
             }
             
-            //System will only run when delta return vs target is < 2 to prevent stabilising on too low temperature
+            //System will only run when delta return vs target is < 3 to prevent stabilising on too low temperature
             const float delta = id(stooklijn_target)-tracking_value;
-            //Run when compressor is running and target not reached and actual return temp within 2 degrees of target
-            if(id(compressor_running).state && !target_reached && ((id(working_mode) == 2 && delta < 2)||(id(working_mode) == 1 && delta > 2))){
+            //Run when compressor is running and target not reached and actual return temp within 3 degrees of target
+            if(id(compressor_running).state && !target_reached && delta < 3){
               //Agressive target setting
-              if(id(working_mode) == 1) temp_new_target = ((tracking_value+1)*10)/10;
-              else if(id(working_mode) == 2) temp_new_target = ((tracking_value-1)*10)/10;
-              //Make sure value is not below target (cooling), or above target (heating)
-              if(id(working_mode) == 1 && temp_new_target < id(stooklijn_target)) temp_new_target = id(stooklijn_target);
-              else if(temp_new_target > id(stooklijn_target)) temp_new_target = id(stooklijn_target);
+              temp_new_target = ((tracking_value-3)*10)/10;
+              if(temp_new_target > id(stooklijn_target)) temp_new_target = id(stooklijn_target);
               ESP_LOGD("anti-pendel", "RETURN_TEMP: %f OUTLET_TEMP: %f TARGET: %f PENDEL_TARGET: %f TRACKING_VALUE: %f OVERSHOOTING: %d",id(water_temp_retour).state,x,id(stooklijn_target),temp_new_target,tracking_value,overshooting);
             } else if(id(compressor_running).state && !target_reached) {
               //Waiting for delta te become within range, less agressive target setting
-              temp_new_target = round((tracking_value)*10)/10;
-              if(id(working_mode) == 1) {
-                if(temp_new_target < id(stooklijn_target)) temp_new_target = id(stooklijn_target);
-              } else {
-                if(temp_new_target > id(stooklijn_target)) temp_new_target = id(stooklijn_target);
-              }
+              temp_new_target = round((tracking_value-1)*10)/10;
+              if(temp_new_target > id(stooklijn_target)) temp_new_target = id(stooklijn_target);
               ESP_LOGD("anti-pendel", "Waiting for delta RETURN_TEMP: %f OUTLET_TEMP: %f DELTA: %f PENDEL_TARGET: %f",id(water_temp_retour).state,x,delta,temp_new_target);
             } else if(!target_reached && pre_run_time > 0) {
               //Make sure target remains at stooklijn target to ensure compressor start (if ok according to WP own logic)
@@ -529,18 +503,15 @@ sensor:
             
             //Make sure changes in stooklijn are processed when target reached
             if(target_reached){
-                //Do not set a lower target if it kills the run
-                if(id(working_mode) == 2){
-                  if(!(tracking_value > id(stooklijn_target) + hysteresis)) temp_new_target = id(stooklijn_target);
-                } else {
-                  temp_new_target = id(stooklijn_target);
-                }
+              //Do not set a lower target if it kills the run
+              if(!(tracking_value > id(stooklijn_target) + hysteresis)) temp_new_target = id(stooklijn_target);
+              temp_new_target = id(stooklijn_target);
             }
-            if(delta < 0.5 && id(compressor_running).state && !target_reached){
-                //Deactive agressive target setting until next run
-                temp_new_target = id(stooklijn_target);
-                target_reached = true;
-                ESP_LOGD("anti-pendel", "Target reached, maintaining target: %f pendel_target: %f",id(stooklijn_target),id(pendel_watertemp_target).state);
+            if(delta < 0.3 && id(compressor_running).state && !target_reached){
+              //Deactive agressive target setting until next run
+              temp_new_target = id(stooklijn_target);
+              target_reached = true;
+              ESP_LOGD("anti-pendel", "Target reached, maintaining target: %f pendel_target: %f",id(stooklijn_target),id(pendel_watertemp_target).state);
             }
             //Allow extra hysteresis during first 15 minutes of heating run
             //Once overshooting = true the extra overshoot is allowed for the remainder of the run
