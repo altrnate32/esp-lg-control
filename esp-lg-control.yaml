@@ -35,7 +35,7 @@ globals:
   - id: stooklijn_target
     type: float
     restore_value: no
-    initial_value: '26'
+    initial_value: '27'
   - id: force_update_stooklijn
     type: bool
     restore_value: no
@@ -47,7 +47,7 @@ globals:
   - id: var_pendel_watertemp_target
     type: float
     restore_value: no
-    initial_value: '26'
+    initial_value: '27'
   - id: run_start
     type: bool
     restore_value: no
@@ -114,7 +114,7 @@ number:
     max_value: 35
     step: 1
     restore_value: yes
-    initial_value: 26
+    initial_value: 27
     unit_of_measurement: "°C"
     optimistic: true
     set_action:
@@ -139,7 +139,7 @@ number:
     id: minimum_run_time
     name: "Minimale run tijd"
     min_value: 0
-    max_value: 30
+    max_value: 60
     step: 1
     restore_value: yes
     initial_value: 30
@@ -172,7 +172,7 @@ number:
     max_value: 60
     step: 1
     restore_value: yes
-    initial_value: 20
+    initial_value: 15
     unit_of_measurement: "min"
     optimistic: true
 switch:
@@ -480,10 +480,10 @@ sensor:
               id(run_start) = 0;
             }
             
-            //System will only run when delta return vs target is < 3 to prevent stabilising on too low temperature
+            //System will run with (very) agressive settings when delta return vs target is < 0.5 to prevent stabilising on too low temperature
             const float delta = id(stooklijn_target)-tracking_value;
             //Run when compressor is running and target not reached and actual return temp within 3 degrees of target
-            if(id(compressor_running).state && !target_reached && delta < 3){
+            if(id(compressor_running).state && !target_reached && delta < 0.5){
               //Agressive target setting
               temp_new_target = ((tracking_value-3)*10)/10;
               if(temp_new_target > id(stooklijn_target)) temp_new_target = id(stooklijn_target);
@@ -507,7 +507,7 @@ sensor:
               if(!(tracking_value > id(stooklijn_target) + hysteresis)) temp_new_target = id(stooklijn_target);
               temp_new_target = id(stooklijn_target);
             }
-            if(delta < 0.3 && id(compressor_running).state && !target_reached){
+            if(delta < 0-hysteresis+0.3 && id(compressor_running).state && !target_reached){
               //Deactive agressive target setting until next run
               temp_new_target = id(stooklijn_target);
               target_reached = true;
