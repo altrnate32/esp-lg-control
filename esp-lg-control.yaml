@@ -61,6 +61,10 @@ globals:
     type: bool
     restore_value: no
     initial_value: 'false'
+  - id: itegral_monitor
+    type: float
+    restore_value: no
+    initial_value: '0'
 
 number:
   - platform: template
@@ -551,23 +555,34 @@ sensor:
                   //this is ok as a transient condition
                   //push current error into integral
                   float integral_factor = 0.067; //1 degree 15 minutes, 2 degrees 8 minutes, 3 degrees 5 minutes
-                  if ((int)id(compressor_rpm) < 25 || delta <= 0) integral_factor = 0.21; //1 degree 5 minutes, 2 degrees 3 minutes, 3 degrees 2 minutes   
-                  else if ((int)id(compressor_rpm) > 50) integral_factor = 0.05; //1 degree 21 minutes, 2 degrees 11 minutes, 3 degrees 7 minutes
-                  integral.push_back(delta*integral_factor);
+                  if ((int)id(compressor_rpm).state < 20 || delta <= 0) integral_factor = 0.33; 
+                  else if ((int)id(compressor_rpm).state < 25) integral_factor = 0.21; //1 degree 5 minutes, 2 degrees 3 minutes, 3 degrees 2 minutes   
+                  else if ((int)id(compressor_rpm).state > 50) integral_factor = 0.05; //1 degree 21 minutes, 2 degrees 11 minutes, 3 degrees 7 minutes
+                  float i_number = delta*integral_factor;
+                  integral.push_back(i_number);
                   //limit size to 20 elements
                   if(integral.size() > 20) integral.erase(integral.begin());
                   //check current integral error
                   float integral_I = 0;
-                  for(std::vector<float>::iterator it = integral.begin(); it != integral.end(); ++it) {
-                    integral_I = integral_I + *it; 
+                  //for(std::vector<float>::iterator it = integral.begin(); it != integral.end(); ++it) {
+                  //  integral_I = integral_I + *it; 
+                  //}
+                  for(auto it : integral){
+                    integral_I = integral_I + it;
                   }
                   ESP_LOGD("anti-pendel","Pendel_delta <= 0 loaded integral. integral: %f",integral_I);
+                  id(itegral_monitor) = integral_I;
+                  id(integral_value).publish_state(integral_I);
                   //if integral error is more than 1 
                   if(integral_I >= 1.0){
                     temp_new_target = temp_new_target + 1;
                     //clear integral
                     integral.clear();
                     ESP_LOGD("anti-pendel","Integral >= 1 increased target.");
+                  } else if (integral_I < -1) {
+                    integral.clear();
+                    integral.push_back(-1);
+                    if(i_number > 0) integral.push_back(i_number);
                   }
                 } else {
                   //Waiting for delta te become within range
@@ -750,6 +765,13 @@ sensor:
     lambda: |-
       return (float)(id(water_temp_aanvoer).state-id(water_temp_retour).state); 
     update_interval: 20s
+  - platform: template
+    name: "Integral"
+    id: integral_value
+    accuracy_decimals: 4
+    lambda: |-
+      return (float)id(itegral_monitor); 
+    update_interval: 300s  
 # Sensors for ESP version and WIFI information
 text_sensor:
   - platform: version
