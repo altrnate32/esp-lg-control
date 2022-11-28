@@ -4,7 +4,19 @@ substitutions:
 esphome:
   name: "${device_name}"
   includes:
-    - lg_heatpump_functions.h 
+    - lg_heatpump_functions.h
+  on_boot:
+    priority: 200
+    then:
+      lambda: !lambda |-
+          //instant on (in case of controller restart during run)
+          if(id(thermostat_signal).state) {
+            id(relay_pump).turn_on();
+            id(relay_heat).turn_on();
+          } else {
+            id(relay_pump).turn_off();
+            id(relay_heat).turn_off();
+          }
           
 packages:
   config_values: !include config/config.yaml
@@ -15,6 +27,7 @@ logger:
   logs:
     modbus_controller.sensor: WARN
     modbus_controller.output: WARN
+    modbus.number: WARN
     esp32.preferences: WARN
     sensor: WARN
     dallas.sensor: WARN
@@ -83,7 +96,7 @@ number:
     max_value: 40
     step: 1
     restore_value: yes
-    initial_value: 30
+    initial_value: 25
     unit_of_measurement: "°C"
     optimistic: true
     set_action:
@@ -97,7 +110,7 @@ number:
     max_value: 20
     step: 1
     restore_value: yes
-    initial_value: 9
+    initial_value: 12
     unit_of_measurement: "°C"
     optimistic: true
     set_action:
@@ -121,7 +134,7 @@ number:
     max_value: 60
     step: 1
     restore_value: yes
-    initial_value: 15
+    initial_value: 10
     unit_of_measurement: "min"
     optimistic: true
   - platform: template
@@ -133,6 +146,26 @@ number:
     restore_value: yes
     initial_value: -10
     unit_of_measurement: "°C"
+    optimistic: true
+  - platform: template
+    id: thermostat_off_delay
+    name: "thermostat off delay"
+    min_value: 0
+    max_value: 10
+    step: 1
+    restore_value: yes
+    initial_value: 1
+    unit_of_measurement: "min"
+    optimistic: true
+  - platform: template
+    id: thermostat_on_delay
+    name: "thermostat on delay"
+    min_value: 0
+    max_value: 10
+    step: 1
+    restore_value: yes
+    initial_value: 0
+    unit_of_measurement: "min"
     optimistic: true
 
 switch:
@@ -146,16 +179,6 @@ switch:
     pin: 19
     id: relay_heat
     restore_mode: RESTORE_DEFAULT_OFF
-    on_turn_off:
-      then:
-        - lambda: |-
-            //Update working mode
-            id(working_mode) = 0;
-    on_turn_on:
-      then:
-        - lambda: |-
-            //Update working mode
-            id(working_mode) = 2;
   - platform: restart
     name: "ESP WP Control Restart"
 
@@ -164,17 +187,6 @@ interval:
     id: state_machine
     then: !include { file: lg_heatpump_state_machine.yaml }
 
-script:
-  - id: after_defrost_script
-    mode: restart
-    then:
-      - delay: !lambda "return 5*60*1000;"
-      - lambda: |-
-          //after delay time, check current target and decide on silent mode
-          float t_delta = id(stooklijn_target) - id(water_temp_aanvoer).state;
-          if(round(id(buiten_temp).state) <= 3 && t_delta >= 3 && id(silent_mode).state && !id(sww_heating).state) id(silent_mode_switch).turn_off();
-          else if(!id(silent_mode).state && round(id(buiten_temp).state) > id(oat_silent_always_off).state) id(silent_mode_switch).turn_on();
-            
 dallas:
   - pin: 32
 
@@ -215,11 +227,6 @@ sensor:
   - platform: template
     name: "Stooklijn Watertemp Target"
     id: watertemp_target
-    unit_of_measurement: "°C"
-    update_interval: never
-  - platform: template
-    name: "Anti-pendel Watertemp Target"
-    id: pendel_watertemp_target
     unit_of_measurement: "°C"
     update_interval: never
   - platform: wifi_signal

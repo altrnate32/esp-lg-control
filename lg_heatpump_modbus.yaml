@@ -55,15 +55,6 @@ binary_sensor:
     register_type: discrete_input
     skip_updates: 1
     address: 4
-    on_state:
-      then:
-        - lambda: |-
-            static bool prev_defrost_state = false;
-            if(x != prev_defrost_state){
-              if(!x) id(after_defrost_script).execute();
-              else id(after_defrost_script).stop();
-              prev_defrost_state = x;
-            }
   - platform: modbus_controller
     modbus_controller_id: lg
     name: "SWW Heating"
@@ -291,4 +282,5 @@ number:
     register_type: holding
     address: 2
     value_type: U_WORD
-    multiply: 1000
+    step: 0.1
+    multiply: 10

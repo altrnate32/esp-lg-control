@@ -1,5 +1,5 @@
-    static const char* state_string[] = {"Init","Idle","Start","Starting","EarlyRun","Running","Overshooting","Undershooting","Waiting","HotWater","Halt","Afterrun"};
-    enum States {INIT,IDLE,START,STARTING,EARLYRUN,RUNNING,OVERSHOOTING,UNDERSHOOTING,WAITING,SWW,HALT,AFTERRUN};
+    static const char* state_string[] = {"Init","Uit","Start","Starting","EarlyRun","Running","Overshooting","Undershooting","Waiting","HotWater","Defrost","Halt","Afterrun"};
+    enum States {INIT,IDLE,START,STARTING,EARLYRUN,RUNNING,OVERSHOOTING,UNDERSHOOTING,WAITING,SWW,DEFROSTING,HALT,AFTERRUN};
 
     //update target temp through modbus
     void set_target_temp(float target){
@@ -13,17 +13,19 @@
       //calculate derivative
       float d_number = tracking_value;
       derivative->push_back(d_number);
-      //limit size to 31 elements(30 minutes)
+      //limit size to 31 elements(15 minutes)
       if(derivative->size() > 31) derivative->erase(derivative->begin());
       //calculate current derivative for 5 and 10 minutes
       //derivative is measured in degrees/minute
       *derivative_D_5 = 0;
       *derivative_D_10 = 0;
-      if(derivative->size() > 5){   
-        *derivative_D_5 = (derivative->back()-derivative->at(derivative->size()-6))/5;
+      //wait until derivative > 15, this makes sure the first 2 minutes are skipped
+      //first minute or so is unreliabel if pump has been off for a while (water cools in the unit)
+      if(derivative->size() > 14){   
+        *derivative_D_5 = (derivative->back()-derivative->at(derivative->size()-11))/10;
       }
-      if(derivative->size() > 10){   
-      *derivative_D_10 = (derivative->back()-derivative->at(derivative->size()-11))/10;
+      if(derivative->size() > 24){   
+      *derivative_D_10 = (derivative->back()-derivative->at(derivative->size()-21))/20;
       id(derivative_value).publish_state(*derivative_D_10*60);
      }
     }
