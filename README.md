@@ -1,3 +1,10 @@
+## ***** Warning *******
+Current state of main: compiling but not tested
+Not even uploaded to an ESP !!
+So better not to use until tested (and bugs fixed)
+Latest stable commit: 88683861c99371b1bb3df0075f0e5e51c6ecc886
+## **** Warning *****
+
 ## esp-lg-control -> Hobby project!
 ESP8266 based controller for LG Therma V Monoblock Unit.
 Connects the LG to HomeAssistant and tries to optimise output modulation.
