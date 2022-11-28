@@ -1,0 +1,294 @@
+modbus:
+  id: modbus_lg
+  uart_id: uart_modbus
+  send_wait_time: 200ms
+  
+uart:
+  tx_pin: GPIO26
+  rx_pin: GPIO25
+  baud_rate: 9600
+  id: uart_modbus
+  parity: none
+  data_bits: 8
+  stop_bits: 1
+
+modbus_controller:
+  - id: lg
+    address: 0x1 # the Modbus device addr
+    modbus_id: modbus_lg
+    update_interval: 60s #this is our main 'clock' all dependel logic follows this pace
+    setup_priority: -10
+
+switch:
+  - platform: modbus_controller
+    name: "Silent Mode"
+    modbus_controller_id: lg
+    id: silent_mode_switch
+    register_type: coil
+    address: 2
+  - platform: modbus_controller
+    name: "SWW On/Off"
+    modbus_controller_id: lg
+    id: sww_on_off
+    register_type: coil
+    address: 1
+  
+binary_sensor:
+  - platform: modbus_controller
+    modbus_controller_id: lg
+    name: "Pump Running"
+    id: pump_running
+    register_type: discrete_input
+    skip_updates: 1
+    address: 1
+  - platform: modbus_controller
+    modbus_controller_id: lg
+    name: "Compressor Running"
+    id: compressor_running
+    register_type: discrete_input
+    skip_updates: 1
+    address: 3
+  - platform: modbus_controller
+    modbus_controller_id: lg
+    name: "Defrosting"
+    id: defrosting
+    register_type: discrete_input
+    skip_updates: 1
+    address: 4
+    on_state:
+      then:
+        - lambda: |-
+            static bool prev_defrost_state = false;
+            if(x != prev_defrost_state){
+              if(!x) id(after_defrost_script).execute();
+              else id(after_defrost_script).stop();
+              prev_defrost_state = x;
+            }
+  - platform: modbus_controller
+    modbus_controller_id: lg
+    name: "SWW Heating"
+    id: sww_heating
+    register_type: discrete_input
+    skip_updates: 1
+    address: 5
+    on_state:
+      then:
+        - lambda: |-
+            static bool prev_sww_state = false;
+            if(x != prev_sww_state){
+              if(x && round(id(buiten_temp).state) > id(oat_silent_always_off).state) id(silent_mode_switch).turn_on();
+              else if(round(id(buiten_temp).state) < id(oat_silent_always_off).state) id(silent_mode_switch).turn_off();
+              prev_sww_state = x;
+            }
+  - platform: modbus_controller
+    modbus_controller_id: lg
+    name: "Silent Mode"
+    id: silent_mode
+    register_type: discrete_input
+    skip_updates: 1
+    address: 7
+
+sensor:
+  - platform: modbus_controller
+    modbus_controller_id: lg
+    name: "Bedrijfsmodus"
+    id: bedrijfsmodus
+    register_type: read
+    address: 1
+    #skip_updates: 12
+    value_type: U_WORD
+  - platform: modbus_controller
+    modbus_controller_id: lg
+    name: "Water retour"
+    id: water_temp_retour
+    register_type: read
+    address: 2
+    unit_of_measurement: "°C"
+    value_type: S_WORD
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1
+  - platform: modbus_controller
+    modbus_controller_id: lg
+    name: "Water aanvoer"
+    id: water_temp_aanvoer
+    register_type: read
+    address: 3
+    unit_of_measurement: "°C"
+    value_type: S_WORD
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1
+  - platform: modbus_controller
+    modbus_controller_id: lg
+    name: "SWW Temperatuur"
+    id: sww_temp
+    register_type: read
+    address: 5
+    unit_of_measurement: "°C"
+    value_type: U_WORD
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1
+  - platform: modbus_controller
+    modbus_controller_id: lg
+    name: "Garagetemperatuur"
+    id: binnen_temp
+    register_type: read
+    address: 7
+    unit_of_measurement: "°C"
+    value_type: U_WORD
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1
+  - platform: modbus_controller
+    modbus_controller_id: lg
+    name: "Flow Rate"
+    id: current_flow_rate
+    register_type: read
+    address: 8
+    unit_of_measurement: "L/m"
+    value_type: U_WORD
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1
+    lambda: |-
+      if(x > 5) return x;
+      else return 0.0;
+  - platform: modbus_controller
+    modbus_controller_id: lg
+    name: "Buitentemperatuur"
+    id: buiten_temp
+    register_type: read
+    address: 12
+    unit_of_measurement: "°C"
+    value_type: S_WORD
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1
+      - sliding_window_moving_average:
+          window_size: 15
+          send_every: 15
+    on_value:
+      then:
+        - lambda: !lambda |-
+            static float prev_oat = -100.0;
+            if (abs(round(x) - round(prev_oat)) > 0.1) {
+              id(update_stooklijn) = true;
+              prev_oat = x;
+            }
+  - platform: modbus_controller
+    modbus_controller_id: lg
+    name: "Unknown Temp 16"
+    id: temp16
+    register_type: read
+    address: 16
+    unit_of_measurement: "°C"
+    value_type: S_WORD
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1
+  - platform: modbus_controller
+    modbus_controller_id: lg
+    name: "Unknown register 17"
+    id: temp17
+    register_type: read
+    address: 17
+    value_type: S_WORD
+  - platform: modbus_controller
+    modbus_controller_id: lg
+    name: "Unknown Temp 18"
+    id: temp18
+    register_type: read
+    address: 18
+    unit_of_measurement: "°C"
+    value_type: S_WORD
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1
+  - platform: modbus_controller
+    modbus_controller_id: lg
+    name: "Unknown Temp 19"
+    id: temp19
+    register_type: read
+    address: 19
+    unit_of_measurement: "°C"
+    value_type: S_WORD
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1
+  - platform: modbus_controller
+    modbus_controller_id: lg
+    name: "Condensor Temp"
+    id: condensor_temp
+    register_type: read
+    address: 20
+    unit_of_measurement: "°C"
+    value_type: S_WORD
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1
+  - platform: modbus_controller
+    modbus_controller_id: lg
+    name: "Pressure 1"
+    id: temp22
+    register_type: read
+    address: 22
+    value_type: U_WORD
+    accuracy_decimals: 2
+    unit_of_measurement: "bar"
+    filters:
+      - multiply: 0.01
+  - platform: modbus_controller
+    modbus_controller_id: lg
+    name: "Pressure 2"
+    id: temp23
+    register_type: read
+    address: 23
+    value_type: U_WORD
+    accuracy_decimals: 2
+    unit_of_measurement: "bar"
+    filters:
+      - multiply: 0.01
+  - platform: modbus_controller
+    modbus_controller_id: lg
+    name: "Compressor RPM"
+    id: compressor_rpm
+    register_type: read
+    address: 24
+    unit_of_measurement: "RPM"
+    value_type: U_WORD
+    accuracy_decimals: 0
+  - platform: modbus_controller
+    modbus_controller_id: lg
+    name: "Doeltemperatuur"
+    id: doel_temp
+    register_type: holding
+    address: 2
+    unit_of_measurement: "°C"
+    value_type: U_WORD
+    accuracy_decimals: 1
+    skip_updates: 3
+    filters:
+      - multiply: 0.1
+  - platform: modbus_controller
+    modbus_controller_id: lg
+    name: "SWW Doeltemperatuur"
+    id: sww_target
+    register_type: holding
+    address: 8
+    unit_of_measurement: "°C"
+    value_type: U_WORD
+    accuracy_decimals: 1
+    skip_updates: 3
+    filters:
+      - multiply: 0.1
+
+number:
+  - platform: modbus_controller
+    modbus_controller_id: lg
+    id: water_temp_target_output
+    register_type: holding
+    address: 2
+    value_type: U_WORD
+    multiply: 1000
