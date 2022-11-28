@@ -65,6 +65,10 @@ globals:
     type: float
     restore_value: no
     initial_value: '0'
+  - id: derivative_monitor
+    type: float
+    restore_value: no
+    initial_value: '0'
 
 number:
   - platform: template
@@ -177,6 +181,16 @@ number:
     initial_value: 15
     unit_of_measurement: "min"
     optimistic: true
+  - platform: template
+    id: oat_silent_always_off
+    name: "Buitentemperatuur silent always off"
+    min_value: -20
+    max_value: 10
+    step: 1
+    restore_value: yes
+    initial_value: -10
+    unit_of_measurement: "°C"
+    optimistic: true
 switch:
   - platform: gpio
     name: "WP External Pump"
@@ -276,6 +290,15 @@ script:
       - lambda: |-
           //switch off pump after delay time
           id(relay1).turn_off();
+  - id: after_defrost_script
+    mode: restart
+    then:
+      - delay: !lambda "return 5*60*1000;"
+      - lambda: |-
+          //after delay time, check current target and decide on silent mode
+          float t_delta = id(stooklijn_target) - id(water_temp_aanvoer).state;
+          if(round(id(buiten_temp).state) <= 3 && t_delta >= 3 && id(silent_mode).state && !id(sww_heating).state) id(silent_mode_switch).turn_off();
+          else if(!id(silent_mode).state && round(id(buiten_temp).state) > id(oat_silent_always_off).state) id(silent_mode_switch).turn_on();
 
 dallas:
   - pin: 32
@@ -319,8 +342,7 @@ output:
     id: modbus_set_DHW_mode
     register_type: coil
     address: 1
-    
- 
+
 binary_sensor:
   - platform: gpio # Thermostat input signal is connected to this input pin
     pin:
@@ -363,6 +385,15 @@ binary_sensor:
     register_type: discrete_input
     skip_updates: 1
     address: 4
+    on_state:
+      then:
+        - lambda: |-
+            static bool prev_defrost_state = false;
+            if(id(defrosting).state != prev_defrost_state){
+              if(!id(defrosting).state) id(after_defrost_script).execute();
+              else id(after_defrost_script).stop();
+              prev_defrost_state = id(defrosting).state;
+            }
   - platform: modbus_controller
     modbus_controller_id: lg
     name: "SWW Heating"
@@ -370,6 +401,15 @@ binary_sensor:
     register_type: discrete_input
     skip_updates: 1
     address: 5
+    on_state:
+      then:
+        - lambda: |-
+            static bool prev_sww_state = false;
+            if(id(sww_heating).state != prev_sww_state){
+              if(id(sww_heating).state && round(id(buiten_temp).state) > id(oat_silent_always_off).state) id(silent_mode_switch).turn_on();
+              else if(round(id(buiten_temp).state) < id(oat_silent_always_off).state) id(silent_mode_switch).turn_off();
+              prev_sww_state = id(sww_heating).state;
+            }
   - platform: modbus_controller
     modbus_controller_id: lg
     name: "Silent Mode"
@@ -423,17 +463,6 @@ sensor:
     accuracy_decimals: 1
     filters:
       - multiply: 0.1
-  - platform: modbus_controller
-    modbus_controller_id: lg
-    name: "Water aanvoer"
-    id: water_temp_aanvoer
-    register_type: read
-    address: 3
-    unit_of_measurement: "°C"
-    value_type: U_WORD
-    accuracy_decimals: 1
-    filters:
-      - multiply: 0.1
     on_value:
       then:
         - lambda: |-
@@ -442,12 +471,14 @@ sensor:
             static int alive_timer = 0;
             //vector of floats to integrate error (used in control logic)
             static std::vector<float> integral;
+            //vector of floats to integrate derivative (used in control logic)
+            static std::vector<float> derivative;
             //anti-pendel target
             static float temp_new_target = id(stooklijn_target);
             //Set controller control mode to 'outlet' and set hysteresis to the setting you have on the controller (recommend 4)
             const static int hysteresis = 4;
             //Set to value that anti-pendel script will track (outlet/inlet) (recommend inlet)
-            const float tracking_value = id(water_temp_retour).state;
+            const float tracking_value = x;
             //bool to indicate that system is in overshoot mode
             static bool overshooting = false;
             //maximum allowable overshoot
@@ -475,6 +506,8 @@ sensor:
 
             //Calculate stooklijn target
             float oat = round(id(buiten_temp).state);
+            //filter outliers (oat sometimes report +6500 degrees)
+            if(oat > 50 || oat < -50) oat = prev_oat;
             //If no oat change, no update needed, unless forced or first run
             if(prev_oat != oat || id(force_update_stooklijn) || id(run_start)){
               prev_oat = oat;
@@ -498,12 +531,12 @@ sensor:
               //Make sure target is not above max water or below minimum temp
               if(id(stooklijn_target) > id(stooklijn_max_wtemp).state) id(stooklijn_target) = id(stooklijn_max_wtemp).state;
               if(id(stooklijn_target) < id(stooklijn_min_wtemp).state) id(stooklijn_target) = id(stooklijn_min_wtemp).state;
-              
               ESP_LOGD("stooklijn", "New stooklijn target value (after correction): %f", id(stooklijn_target));
               //Publish new stooklijn value to watertemp value sensor
               id(watertemp_target).publish_state(id(stooklijn_target));
             }
-            
+            //Current Error value
+            const float delta = id(stooklijn_target)-tracking_value;
             //Calculate new (anti pendel) target
             //Basic algorithm
             //System initializes at the start of a run (when working mode changes 2)
@@ -523,11 +556,20 @@ sensor:
               overshooting = false;
               //clear integral
               integral.clear();
-              //Set initial target at stooklijn_target - hysteresis with a minimum of current tracking value + 2
+              //clear derivative
+              derivative.clear();
+              //Set initial target at stooklijn_target - initial_offset with a minimum of current tracking value + 2
               //and a maximum of stooklijn target. This will ensure compressor start
-              temp_new_target = id(stooklijn_target)-hysteresis;
+              int initial_offset = 4;
+              if(oat < 6) initial_offset = 3;
+              temp_new_target = id(stooklijn_target)-initial_offset;
               if(temp_new_target < ceil(tracking_value) + 2 ) temp_new_target = ceil(tracking_value) + 2;
               if(temp_new_target > id(stooklijn_target)) temp_new_target = id(stooklijn_target);
+              //If OAT <= 3 and silent mode on and delta >= 3 set silent mode off
+              //else set silent on
+              id(after_defrost_script).stop();
+              if(!id(sww_heating).state && oat > id(oat_silent_always_off).state && oat <= 3 && delta <= 3 && id(silent_mode).state) id(silent_mode_switch).turn_off();
+              else id(silent_mode_switch).turn_on();
               ESP_LOGD("anti-pendel", "Run start initial target set; stooklijn_target: %f pendel_target: %f inlet: %f outlet: %f",id(stooklijn_target),temp_new_target,x,id(water_temp_retour).state);
               id(run_start) = false;
             }
@@ -536,115 +578,140 @@ sensor:
               ESP_LOGD("anti-pendel", "Waiting for pre_run_time: %i",pre_run_time);
               pre_run_time--;
             }
-            //Current Error value
-            const float delta = id(stooklijn_target)-tracking_value;
+            
             //Error value in regard to pendel target
             const float pendel_delta = temp_new_target-tracking_value;
             //system will keep initial target until pendel_delta <= -3 and then slowly increase until reaching stooklijn_target
-            //Run when compressor is running
-            if(id(compressor_running).state){
-              if(!target_reached){
-                if(pendel_delta <= 0-(hysteresis-1)){
-                  //increase target
-                  temp_new_target = temp_new_target + 1;
-                  //reset integral
-                  integral.clear();
-                  ESP_LOGD("anti-pendel","Pendel_delta <= 0-(hysteresis-1) increased target.");
-                } else if(pendel_delta <= 0){
-                  //temperature is more than pendel_target, but lower than pendel_target+(hysteresis-1)
-                  //this is ok as a transient condition
-                  //push current error into integral
-                  float integral_factor = 0.067; //1 degree 15 minutes, 2 degrees 8 minutes, 3 degrees 5 minutes
-                  if ((int)id(compressor_rpm).state < 20 || delta <= 0) integral_factor = 0.33; 
-                  else if ((int)id(compressor_rpm).state < 25) integral_factor = 0.21; //1 degree 5 minutes, 2 degrees 3 minutes, 3 degrees 2 minutes   
-                  else if ((int)id(compressor_rpm).state > 50) integral_factor = 0.05; //1 degree 21 minutes, 2 degrees 11 minutes, 3 degrees 7 minutes
-                  float i_number = delta*integral_factor;
-                  integral.push_back(i_number);
-                  //limit size to 20 elements
-                  if(integral.size() > 20) integral.erase(integral.begin());
-                  //check current integral error
-                  float integral_I = 0;
-                  //for(std::vector<float>::iterator it = integral.begin(); it != integral.end(); ++it) {
-                  //  integral_I = integral_I + *it; 
-                  //}
-                  for(auto it : integral){
-                    integral_I = integral_I + it;
-                  }
-                  ESP_LOGD("anti-pendel","Pendel_delta <= 0 loaded integral. integral: %f",integral_I);
-                  id(itegral_monitor) = integral_I;
-                  id(integral_value).publish_state(integral_I);
-                  //if integral error is more than 1 
-                  if(integral_I >= 1.0){
-                    temp_new_target = temp_new_target + 1;
-                    //clear integral
-                    integral.clear();
-                    ESP_LOGD("anti-pendel","Integral >= 1 increased target.");
-                  } else if (integral_I < -1) {
-                    integral.clear();
-                    integral.push_back(-1);
-                    if(i_number > 0) integral.push_back(i_number);
-                  }
-                } else {
-                  //Waiting for delta te become within range
-                  ESP_LOGD("anti-pendel", "Waiting for temperature to reach operational range.");
+            
+            if(!id(compressor_running).state) return;
+            //****************************************************************
+            //****************Run when compressor is running******************
+            //****************************************************************
+            
+            //calculate derivative
+            float d_number = tracking_value;
+            derivative.push_back(d_number);
+            //limit size to 31 elements(30 minutes)
+            if(derivative.size() > 31) derivative.erase(derivative.begin());
+            //calculate current derivative for 5, 10 and 30 minutes
+            float derivative_D_5 = 0;
+            float derivative_D_10 = 0;
+            float derivative_D_30 = 0;
+            if(derivative.size() > 5){   
+              derivative_D_5 = derivative.back()-derivative.at(derivative.size()-6);
+            }
+            if(derivative.size() > 10){   
+              derivative_D_10 = derivative.back()-derivative.at(derivative.size()-11);
+              id(derivative_monitor) = derivative_D_10/10;
+              id(derivative_value).publish_state(derivative_D_10*6);
+            }
+            if(derivative.size() > 30){   
+              derivative_D_30 = derivative.back()-derivative.at(derivative.size()-31);
+            }
+
+            //if delta <= 0 set silent mode unless oat < oat_silent_always_off
+            if(delta <= 0 && oat > id(oat_silent_always_off).state && !id(silent_mode).state) id(silent_mode_switch).turn_on();
+            if(!target_reached){
+              if(pendel_delta <= 0-(hysteresis-1)){
+                //increase target
+                temp_new_target = temp_new_target + 1;
+                //reset integral
+                integral.clear();
+                ESP_LOGD("anti-pendel","Pendel_delta <= 0-(hysteresis-1) increased target.");
+              } else if(pendel_delta <= 0){
+                //temperature is more than pendel_target, but lower than pendel_target+(hysteresis-1)
+                //this is ok as a transient condition
+                //push current error into integral
+                float integral_factor = 0.067; //1 degree 15 minutes
+                if ((int)id(compressor_rpm).state < 20 || delta <= 0) integral_factor = 0.25; //1 degree 4 minutes
+                else if ((int)id(compressor_rpm).state < 30) integral_factor = 0.1; //1 degree 10 minutes
+                else if ((int)id(compressor_rpm).state > 50) integral_factor = 0.05; //1 degree 20 minutes
+                float i_number = integral_factor;
+                integral.push_back(i_number);
+                //limit size to 20 elements
+                if(integral.size() > 20) integral.erase(integral.begin());
+                //check current integral error
+                float integral_I = 0;
+                for(auto it : integral){
+                  integral_I = integral_I + it;
                 }
-                if(temp_new_target >= id(stooklijn_target)){
-                  //Set target reached
-                  temp_new_target = id(stooklijn_target);
-                  target_reached = true;
+                ESP_LOGD("anti-pendel","Pendel_delta <= 0 loaded integral. integral: %f",integral_I);
+                //if integral error is more than 1 
+                if(integral_I >= 1.0){
+                  temp_new_target = temp_new_target + 1;
                   //clear integral
                   integral.clear();
-                  ESP_LOGD("anti-pendel", "Target reached, setting target_reached=true");
-                } 
+                  ESP_LOGD("anti-pendel","Integral >= 1 increased target.");
+                } else if (integral_I < -1) {
+                  integral.clear();
+                  integral.push_back(-1);
+                  if(i_number > 0) integral.push_back(i_number);
+                }
+                id(itegral_monitor) = integral_I;
+                id(integral_value).publish_state(integral_I);
               } else {
-                //target reached
-                if(overshooting){
-                  //logic to return back to target
-                  if((pendel_delta + hysteresis) <= 0 ){
-                    //run is about to be killed, raise target if there is still room
-                    temp_new_target = temp_new_target + 1;
-                    if(temp_new_target > id(stooklijn_target) + max_overshoot) temp_new_target = id(stooklijn_target) + max_overshoot;
-                    ESP_LOGD("anti-pendel", "Overshooting and run about to be killed. Raised target (if there was room)");
-                  } else if(temp_new_target > id(stooklijn_target)){
-                    //check if target can be lowered without killing the run
-                    if(pendel_delta + (hysteresis-1) >= 0 ){
-                      temp_new_target = temp_new_target - 1;
+                //Waiting for delta te become within range
+                ESP_LOGD("anti-pendel", "Waiting for temperature to reach operational range.");
+              }
+              if(temp_new_target >= id(stooklijn_target)){
+                //Set target reached
+                temp_new_target = id(stooklijn_target);
+                target_reached = true;
+                //clear integral
+                integral.clear();
+                //set silent mode unless oat < oat_silent_always_off
+                id(after_defrost_script).stop();
+                if(oat > id(oat_silent_always_off).state && !id(silent_mode).state) id(silent_mode_switch).turn_on();
+                ESP_LOGD("anti-pendel", "Target reached, setting target_reached=true");
+              } 
+            } else {
+              //target reached
+              if(overshooting){
+                //logic to return back to target
+                if((pendel_delta + hysteresis) <= 0 ){
+                  //run is about to be killed, raise target if there is still room
+                  temp_new_target = temp_new_target + 1;
+                  if(temp_new_target > id(stooklijn_target) + max_overshoot) temp_new_target = id(stooklijn_target) + max_overshoot;
+                  ESP_LOGD("anti-pendel", "Overshooting and run about to be killed. Raised target (if there was room)");
+                } else if(temp_new_target > id(stooklijn_target)){
+                  //check if target can be lowered without killing the run
+                  if(pendel_delta + (hysteresis-1) >= 0 ){
+                    temp_new_target = temp_new_target - 1;
+                  }
+                  ESP_LOGD("anti-pendel", "Overshooting, checked if target could be lowered");
+                } else if(delta >= 0) {
+                  //all normal again
+                  temp_new_target = id(stooklijn_target);
+                  overshooting = false;
+                  ESP_LOGD("anti-pendel", "Overshooting: all normal setting overshooting=false");
+                }
+              } else {
+                if(delta >= 0){
+                  if(delta > 1){
+                    if(temp_new_target != id(stooklijn_target)){
+                      //target_reached = true, but delta > 1 and temp_new_target does not match stooklijn target
+                      //probably an update of the stooklijn target
+                      //simply declare target_reached false and the algoritm will pick it up throug the integral
+                      target_reached = false;
+                      ESP_LOGD("anti-pendel", "Target reached, but stooklijn updated setting target_reached=false");
                     }
-                    ESP_LOGD("anti-pendel", "Overshooting, checked if target could be lowered");
-                  } else if(delta >= 0) {
-                    //all normal again
-                    temp_new_target = id(stooklijn_target);
-                    overshooting = false;
-                    ESP_LOGD("anti-pendel", "Overshooting: all normal setting overshooting=false");
+                  } else if(delta >= 1.8){
+                    //Target has been reached, but delta >= 1.8 and target is not changed.
+                    //This means that the compressor switched on again after a period of being off. Restart logic
+                    integral.clear();
+                    //set target again
+                    temp_new_target = ceil(tracking_value)-(hysteresis-1);
+                    if(temp_new_target > id(stooklijn_target)) temp_new_target = id(stooklijn_target);
+                    ESP_LOGD("anti-pendel", "Compressor restart? New target set");
                   }
                 } else {
-                  if(delta >= 0){
-                    if(delta > 1){
-                      if(temp_new_target != id(stooklijn_target)){
-                        //target_reached = true, but delta > 1 and temp_new_target does not match stooklijn target
-                        //probably an update of the stooklijn target
-                        //simply declare target_reached false and the algoritm will pick it up throug the integral
-                        target_reached = false;
-                        ESP_LOGD("anti-pendel", "Target reached, but stooklijn updated setting target_reached=false");
-                      }
-                    } else if(delta >= 1.8){
-                      //Target has been reached, but delta >= 1.8 and target is not changed.
-                      //This means that the compressor switched on again after a period of being off. Restart logic
-                      integral.clear();
-                      //set target again
-                      temp_new_target = ceil(tracking_value)-(hysteresis-1);
-                      if(temp_new_target > id(stooklijn_target)) temp_new_target = id(stooklijn_target);
-                      ESP_LOGD("anti-pendel", "Compressor restart? New target set");
-                    }
-                  } else {
-                    //negative delta (so temp above target, but not (yet) overshooting)
-                    overshooting = true;
-                    ESP_LOGD("anti-pendel", "Setting overshooting = true;");
-                  } 
-                }
+                  //negative delta (so temp above target, but not (yet) overshooting)
+                  overshooting = true;
+                  ESP_LOGD("anti-pendel", "Setting overshooting = true;");
+                } 
               }
-              ESP_LOGD("anti-pendel", "RETURN_TEMP: %f OUTLET_TEMP: %f TARGET: %f PENDEL_TARGET: %f TRACKING_VALUE: %f DELTA: %f PENDEL_DELTA: %f OVERSHOOTING: %d",id(water_temp_retour).state,x,id(stooklijn_target),temp_new_target,tracking_value,delta,pendel_delta,overshooting);
-            }         
+            }
+            ESP_LOGD("anti-pendel", "RETURN_TEMP: %f OUTLET_TEMP: %f TARGET: %f PENDEL_TARGET: %f TRACKING_VALUE: %f DELTA: %f PENDEL_DELTA: %f OVERSHOOTING: %d",id(water_temp_retour).state,x,id(stooklijn_target),temp_new_target,tracking_value,delta,pendel_delta,overshooting);
             if((float)temp_new_target != (float)id(var_pendel_watertemp_target) || (int)id(var_pendel_watertemp_target) != (int)id(doel_temp).state){
               ESP_LOGD("anti-pendel", "Modbus Update requested. temp_new_target: %f var_pendel_watertemp_target %f/%d doel_temp: %d",temp_new_target,(float)id(var_pendel_watertemp_target),(int)id(pendel_watertemp_target).state,(int)id(doel_temp).state);
               //Set new target
@@ -655,6 +722,18 @@ sensor:
               //Update target through modbus (set level needs value between 0-1, so divide by 100)
               id(water_temp_target_output).set_level(id(var_pendel_watertemp_target)*0.01);
             }
+  - platform: modbus_controller
+    modbus_controller_id: lg
+    name: "Water aanvoer"
+    id: water_temp_aanvoer
+    register_type: read
+    address: 3
+    unit_of_measurement: "°C"
+    value_type: U_WORD
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1
+    
   - platform: modbus_controller
     modbus_controller_id: lg
     name: "SWW Temperatuur"
@@ -695,7 +774,7 @@ sensor:
     register_type: read
     address: 12
     unit_of_measurement: "°C"
-    value_type: U_WORD
+    value_type: S_WORD
     accuracy_decimals: 1
     filters:
       - multiply: 0.1
@@ -768,9 +847,17 @@ sensor:
   - platform: template
     name: "Integral"
     id: integral_value
-    accuracy_decimals: 4
+    accuracy_decimals: 1
     lambda: |-
       return (float)id(itegral_monitor); 
+    update_interval: 300s
+  - platform: template
+    name: "Derivative"
+    id: derivative_value
+    accuracy_decimals: 4
+    unit_of_measurement: "°C/h"
+    lambda: |-
+      return (float)(id(derivative_monitor)*60); 
     update_interval: 300s  
 # Sensors for ESP version and WIFI information
 text_sensor:
