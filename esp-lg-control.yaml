@@ -30,7 +30,9 @@ logger:
     modbus.number: WARN
     esp32.preferences: WARN
     sensor: WARN
+    text_sensor: WARN
     dallas.sensor: WARN
+    number: WARN
 
 globals:
   - id: stooklijn_target
@@ -248,11 +250,6 @@ sensor:
     lambda: |-
       return (float)(id(water_temp_aanvoer).state-id(water_temp_retour).state); 
     update_interval: 60s
-  - platform: template
-    name: "Integral"
-    id: integral_value
-    accuracy_decimals: 1
-    update_interval: never
   - platform: template
     name: "Derivative"
     id: derivative_value

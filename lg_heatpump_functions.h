@@ -1,5 +1,6 @@
-    static const char* state_string[] = {"Init","Uit","Start","Starting","EarlyRun","Running","Overshooting","Undershooting","Waiting","HotWater","Defrost","Halt","Afterrun"};
-    enum States {INIT,IDLE,START,STARTING,EARLYRUN,RUNNING,OVERSHOOTING,UNDERSHOOTING,WAITING,SWW,DEFROSTING,HALT,AFTERRUN};
+    static const char* state_string_friendly[] = {"Initialiseren","Uit","Start","Opstarten","Aan (stabiliseren)","Aan (verwarmen)","Aan (overshoot)","Aan (stall)","Pauze (Uit)","Aan (Warm Water)","Ontdooien","Uitschakelen","Nadraaien"};
+    static const char* state_string[] = {"INIT","IDLE","START","STARTING","STABILIZE","RUN","OVERSHOOT","STALL","WAIT","SWW","DEFROST","HALT","AFTERRUN"};
+    enum States {INIT,IDLE,START,STARTING,STABILIZE,RUN,OVERSHOOT,STALL,WAIT,SWW,DEFROST,HALT,AFTERRUN};
 
     //update target temp through modbus
     void set_target_temp(float target){
@@ -19,7 +20,7 @@
       //derivative is measured in degrees/minute
       *derivative_D_5 = 0;
       *derivative_D_10 = 0;
-      //wait until derivative > 15, this makes sure the first 2 minutes are skipped
+      //wait until derivative > 14, this makes sure the first 2 minutes are skipped
       //first minute or so is unreliabel if pump has been off for a while (water cools in the unit)
       if(derivative->size() > 14){   
         *derivative_D_5 = (derivative->back()-derivative->at(derivative->size()-11))/10;

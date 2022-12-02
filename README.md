@@ -1,9 +1,9 @@
-## ***** Warning *******
-Current state of main: compiling but not tested
-Not even uploaded to an ESP !!
-So better not to use until tested (and bugs fixed)
-Latest stable commit: 88683861c99371b1bb3df0075f0e5e51c6ecc886
-## **** Warning *****
+## ******* State of main:  *******
+Current state of main: tested and basic functions ok
+Limited testing performed (in temperatures < 5 degrees)
+Startup and initial stabilization functions good
+Running seems to work good. Limited testing on stalling (so far soo good). Almost no testing on overhoot
+## *******************************
 
 ## esp-lg-control -> Hobby project!
 ESP8266 based controller for LG Therma V Monoblock Unit.
