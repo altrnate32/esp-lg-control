@@ -221,15 +221,13 @@ sensor:
       - multiply: 0.1
   - platform: modbus_controller
     modbus_controller_id: lg
-    name: "Pressure 1"
-    id: temp22
+    name: "WP Sensed Power"
+    id: wp_sensed_power
     register_type: read
     address: 22
     value_type: U_WORD
-    accuracy_decimals: 2
-    unit_of_measurement: "bar"
-    filters:
-      - multiply: 0.01
+    accuracy_decimals: 0
+    unit_of_measurement: "W"
   - platform: modbus_controller
     modbus_controller_id: lg
     name: "Pressure 2"

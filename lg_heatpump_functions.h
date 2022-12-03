@@ -73,4 +73,3 @@
       id(watertemp_target).publish_state(id(stooklijn_target));
       return;
     }
-
