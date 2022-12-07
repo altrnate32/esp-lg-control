@@ -45,30 +45,34 @@
     void calculate_stooklijn(){
       //Calculate stooklijn target
       //Hold previous script run oat value
-      static float prev_oat = 15; //oat above minimum water temp to prevent strange events on startup
+      static float prev_oat = 20; //oat at minimum water temp (20/20) to prevent strange events on startup
       //wait for a valid oat reading
-      float oat = 15;
+      float oat = 20;
       if(id(buiten_temp).state > 60 || id(buiten_temp).state < -50 || isnan(id(buiten_temp).state)){
         oat = prev_oat;
-        //use prev_oat (or 15) and do not set update_stooklijn to false, to trigger a new run on next cycle
+        //use prev_oat (or 20) and do not set update_stooklijn to false, to trigger a new run on next cycle
         ESP_LOGD("calculate_stooklijn", "Invalid OAT (%f) waiting for next run", id(buiten_temp).state);
       }  else {
         oat = round(id(buiten_temp).state);
         prev_oat = oat;
         id(update_stooklijn) = false;
       }
-
-      //Formula is wTemp = (Z x (stooklijn_start_temp - OAT)) + stooklijn_min_wtemp         
-      //Formula to calculate Z = 0-((stooklijn_max_wtemp-stooklijn_min_wtemp)) / (stooklijn_min_oat - stooklijn_start_temp))
-      const float Z =  0 - (float)((id(stooklijn_max_wtemp).state-id(stooklijn_min_wtemp).state)/(id(stooklijn_min_oat).state - id(stooklijn_start_temp).state));
+      //OAT expects start temp to be OAT 20 with Watertemp 20. Steepness is defined bij Z, calculated by the max wTemp at minOat
+      //Formula is wTemp = ((Z x (20 - OAT)) + 20) + C 
+      //Formula to calculate Z = 0-((stooklijn_max_wtemp-20)) / (stooklijn_min_oat - stooklijn_start_temp))
+      //C is the curvature of the stooklijn defined by C = (stooklijn_curve*0.001)*sqrt(oat-20)
+      //This will add a positive offset with decreasing offset. You can set this to zero if you don't need it and want a linear stooklijn
+      //I need it in my installation as the stooklijn is spot on at relative high temperatures, but too low at lower temps
+      const float Z =  0 - (float)( (id(stooklijn_max_wtemp).state-20)/(id(stooklijn_min_oat).state - 20));
       //If oat below minimum oat, clamp to minimum value
-      clamp(oat,id(stooklijn_min_oat).state,id(stooklijn_start_temp).state);
-      id(stooklijn_target) = (int)round( (Z * (id(stooklijn_start_temp).state-oat))+id(stooklijn_min_wtemp).state);
+      clamp(oat,id(stooklijn_min_oat).state,(float)20.0);
+      float C = (id(stooklijn_curve).state*0.001)*pow((oat-20),2);
+      id(stooklijn_target) = (int)round( (Z * (20-oat))+20+C);
       //Add stooklijn offset
       id(stooklijn_target) = id(stooklijn_target) + id(wp_stooklijn_offset).state;
       //Clamp target to minimum temp/max water+3
       clamp(id(stooklijn_target),id(stooklijn_min_wtemp).state,id(stooklijn_max_wtemp).state+3);
-      ESP_LOGD("calculate_stooklijn", "Stooklijn calculated with oat: %f, Z: %f, offset: %f, result: %f",oat, Z, id(wp_stooklijn_offset).state, id(stooklijn_target));
+      ESP_LOGD("calculate_stooklijn", "Stooklijn calculated with oat: %f, Z: %f, C: %f offset: %f, result: %f",oat, Z, C, id(wp_stooklijn_offset).state, id(stooklijn_target));
       //Publish new stooklijn value to watertemp value sensor
       id(watertemp_target).publish_state(id(stooklijn_target));
       return;

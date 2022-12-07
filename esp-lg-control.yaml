@@ -39,10 +39,6 @@ globals:
     type: float
     restore_value: no
     initial_value: '30'
-  - id: working_mode
-    type: int
-    restore_value: no
-    initial_value: '0'
   - id: update_stooklijn
     type: bool
     restore_value: no
@@ -58,6 +54,19 @@ number:
     step: 1
     restore_value: yes
     unit_of_measurement: "°C"
+    optimistic: true
+    set_action:
+      then:
+        lambda: !lambda |-
+            id(update_stooklijn) = true;
+  - platform: template
+    id: stooklijn_curve
+    name: "Stooklijn Curve"
+    min_value: 0
+    max_value: 6
+    step: 1
+    restore_value: yes
+    initial_value: 3
     optimistic: true
     set_action:
       then:
@@ -106,20 +115,6 @@ number:
         lambda: !lambda |-
             id(update_stooklijn) = true;
   - platform: template
-    id: stooklijn_start_temp
-    name: "Stooklijn Start Buitentemperatuur"
-    min_value: 0
-    max_value: 20
-    step: 1
-    restore_value: yes
-    initial_value: 12
-    unit_of_measurement: "°C"
-    optimistic: true
-    set_action:
-      then:
-        lambda: !lambda |-
-            id(update_stooklijn) = true;
-  - platform: template
     id: minimum_run_time
     name: "Minimale run tijd"
     min_value: 0
@@ -147,6 +142,16 @@ number:
     step: 1
     restore_value: yes
     initial_value: -10
+    unit_of_measurement: "°C"
+    optimistic: true
+  - platform: template
+    id: oat_silent_boost
+    name: "Buitentemperatuur silent boost"
+    min_value: -20
+    max_value: 20
+    step: 1
+    restore_value: yes
+    initial_value: 6
     unit_of_measurement: "°C"
     optimistic: true
   - platform: template
@@ -268,4 +273,8 @@ text_sensor:
   - platform: template
     name: "Controller state"
     id: controller_state
+    update_interval: never
+  - platform: template
+    name: "Controller info"
+    id: controller_info
     update_interval: never

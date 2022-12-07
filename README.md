@@ -1,8 +1,8 @@
 ## ******* State of main:  *******
-Current state of main: tested and basic functions ok
-Limited testing performed (in temperatures < 5 degrees)
+Current state of main: tested and mostly ok
+Tested for serveral days and seems pretty stable
 Startup and initial stabilization functions good
-Running seems to work good. Limited testing on stalling (so far soo good). Almost no testing on overhoot
+Overshoot and stall functioning as expected (maybe a little too agressive, nees some tuning)
 ## *******************************
 
 ## esp-lg-control -> Hobby project!
@@ -13,6 +13,7 @@ Tested with 3-phase 14kW U34 version. So propably works at least with 12-14-16kW
 This is a hobby project. I share this to allow other people to pick up ideas and contribute. All assistance is welcome. I will not provide support, so use at your own risk. And make sure you know what you are doing, by using this script it is possible that your unit stops functioning or breaks and you could electrocute yourself.
 
 ## Whats new:
+Update: Rewrote code to simple finite state machine. Gives more stability and is easier to debug
 Update: Changed ant-pendel algoritm to monitor return temp. After much experimenting I have the feeling that the LG controller modulates on the return temp, not the supply temp.
 Update: Ditched the PID controller. Switched back to an (improved) basic algorithm.
 
