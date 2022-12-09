@@ -46,7 +46,8 @@ lambda: !lambda |-
     float pred_5_delta_5 = 0; //predicted delta in 5 minutes based on last 5 minute derivative
     static int stooklijn_target_offset = -3; //offset at start of run
     static int boost_offset = 0;
-    
+    static bool boost = false;
+
     run_time += dt;
     if(run_time % alive_timer == 0){
       ESP_LOGD(state_string[state], "**alive** timer: %d oat: %f inlet: %f outlet: %f tracking_value: %f stooklijn: %f pendel: %f delta: %f pendel_delta: %f ",run_time,id(buiten_temp).state,id(water_temp_retour).state,id(water_temp_aanvoer).state,tracking_value,id(stooklijn_target),temp_new_target,delta,pendel_delta);
@@ -118,28 +119,28 @@ lambda: !lambda |-
     //check boost (raising the stooklijn with 2 degrees for xx minutes)
     if(id(boost_switch).state){
       //already in boost mode?
-      if(id(boost_bool)){
+      if(boost){
         //yes, check time
         if(run_time - boost_start_time > (id(boost_time).state*60)){
           //expired, stop boost
-          id(boost_bool) = false;
+          boost = false;
+          id(boost_switch).turn_off();
           id(boost_active).publish_state(false);
-          id(stooklijn_target) = id(stooklijn_target) - boost_offset;
           boost_offset = 0;
         }
       } else {
         //no, start boost mode
-        id(boost_bool) = true;
+        boost = true;
+        id(boost_active).publish_state(true);
         boost_start_time = run_time;
         boost_offset = 2;
       }
     } else {
       //boost switched off, did we know this?
-      if(id(boost_bool)){
+      if(boost){
         //no we did not
-        id(boost_bool) = false;
+        boost = false;
         id(boost_active).publish_state(false);
-        id(stooklijn_target) = id(stooklijn_target) - boost_offset;
         boost_offset = 0;
       }
     }
