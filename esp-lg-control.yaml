@@ -43,6 +43,10 @@ globals:
     type: bool
     restore_value: no
     initial_value: 'true'
+  - id: boost_bool
+    type: bool
+    restore_value: no
+    initial_value: 'false'
 
 number:
   - platform: template
@@ -156,7 +160,7 @@ number:
     optimistic: true
   - platform: template
     id: thermostat_off_delay
-    name: "thermostat off delay"
+    name: "Thermostat off delay"
     min_value: 0
     max_value: 10
     step: 1
@@ -166,12 +170,22 @@ number:
     optimistic: true
   - platform: template
     id: thermostat_on_delay
-    name: "thermostat on delay"
+    name: "Thermostat on delay"
     min_value: 0
     max_value: 10
     step: 1
     restore_value: yes
     initial_value: 0
+    unit_of_measurement: "min"
+    optimistic: true
+  - platform: template
+    id: boost_time
+    name: "Boost duration"
+    min_value: 0
+    max_value: 180
+    step: 1
+    restore_value: yes
+    initial_value: 60
     unit_of_measurement: "min"
     optimistic: true
 
@@ -188,6 +202,19 @@ switch:
     restore_mode: RESTORE_DEFAULT_OFF
   - platform: restart
     name: "ESP WP Control Restart"
+  - platform: template
+    name: "Temperature Boost"
+    id: boost_switch
+    lambda: |-
+        return id(boost_bool);
+    turn_on_action:
+      - globals.set:
+          id: boost_bool
+          value: 'true'
+    turn_off_action:
+      - globals.set:
+          id: boost_bool
+          value: 'false'
 
 interval:
   - interval: 30s
@@ -208,7 +235,12 @@ binary_sensor:
     id: thermostat_signal
     filters:
       - delayed_on: 500ms # Debounce
-    
+  - platform: template
+    name: "Boost mode active"
+    id: boost_active
+    lambda: |-
+        return id(boost_bool);
+
 sensor:
   - platform: dallas
     address: 0x4a0122113a9bd528

@@ -45,7 +45,6 @@ lambda: !lambda |-
     float pred_20_delta_10 = 0; //predicted delta in 20 minutes based on last 10 minute derivative
     float pred_5_delta_5 = 0; //predicted delta in 5 minutes based on last 5 minute derivative
     static int stooklijn_target_offset = -3; //offset at start of run
-    static bool boost = false; //boost is raising the stooklijn by 2 degrees for 1 hour to bring temperature back
     static int boost_offset = 0;
     
     run_time += dt;
@@ -57,6 +56,9 @@ lambda: !lambda |-
     if(delta >= 0 && oat > id(oat_silent_always_off).state && !id(silent_mode).state) {
       ESP_LOGD(state_string[state],"Delta > 0 and silent mode off, switching silent mode on");
       id(silent_mode_switch).turn_on();
+    } else if(oat < id(oat_silent_always_off).state && id(silent_mode).state && state != SWW && state != START && state != STARTING && state != STABILIZE) {
+      ESP_LOGD(state_string[state],"Oat < oat_silent_always_in Switching silent mode off");
+      id(silent_mode_switch).turn_off();
     }
     
     //***************************************************************
@@ -113,15 +115,35 @@ lambda: !lambda |-
       state = DEFROST;
     }
 
-    //check boost (raising the stooklijn with 2 degrees for 1 hour)
-    if(boost){
-      if(run_time - boost_start_time > (60*60)){
+    //check boost (raising the stooklijn with 2 degrees for xx minutes)
+    if(id(boost_switch).state){
+      //already in boost mode?
+      if(id(boost_bool)){
+        //yes, check time
+        if(run_time - boost_start_time > (id(boost_time).state*60)){
+          //expired, stop boost
+          id(boost_bool) = false;
+          id(boost_active).publish_state(false);
+          id(stooklijn_target) = id(stooklijn_target) - boost_offset;
+          boost_offset = 0;
+        }
+      } else {
+        //no, start boost mode
+        id(boost_bool) = true;
+        boost_start_time = run_time;
+        boost_offset = 2;
+      }
+    } else {
+      //boost switched off, did we know this?
+      if(id(boost_bool)){
+        //no we did not
+        id(boost_bool) = false;
+        id(boost_active).publish_state(false);
         id(stooklijn_target) = id(stooklijn_target) - boost_offset;
         boost_offset = 0;
-        boost = false;
       }
     }
-    
+   
     if(id(stooklijn_target) != prev_stooklijn_target){
       //value changed, recalculate delta;
       ESP_LOGD(state_string[state],"Stooklijn target changed, recalculating delta.");
@@ -170,10 +192,10 @@ lambda: !lambda |-
         else if(oat < 6) stooklijn_target_offset = -2;
         else if(oat < 15) stooklijn_target_offset = -3;
         else stooklijn_target_offset = -4;
-        if(id(silent_mode).state && oat < id(oat_silent_always_off).state) id(silent_mode_switch).turn_off();
-        else id(silent_mode_switch).turn_on();
         ESP_LOGD(state_string[state], "Run start initial target set; stooklijn_target: %f pendel_target: %f inlet: %f outlet: %f",id(stooklijn_target),temp_new_target,id(water_temp_aanvoer).state,id(water_temp_retour).state);
         run_start_time = run_time;
+        //always start with silent on
+        if(!id(silent_mode).state) id(silent_mode_switch).turn_on();
         //switch on heatpump external thermostat contact
         id(relay_heat).turn_on();
         state = STARTING;
@@ -188,6 +210,8 @@ lambda: !lambda |-
         break;
       }
       case STABILIZE: {
+        //always stabilize with silent on
+        if(!id(silent_mode).state) id(silent_mode_switch).turn_on();
         //check how far we are in the run
         if((run_time - run_start_time) > (20*60)){
           //monitor situation
@@ -280,10 +304,10 @@ lambda: !lambda |-
           //we are operating at or below stooklijn_target with actual or predicted overshoot, but no emergency
           //see if we intervene or just monitor
           if(pred_20_delta_5 > 2 || pred_20_delta_10 > 2){
-            //lower target, but not below stooklijn_target - 2
+            //lower target, but not below stooklijn_target - 3
             //limit number of updates to once every 5 minutes. Don't update if already sufficient downward trend
             if((run_time - target_change_time) > (5*60) && (derivative_D_5*60) > -2){
-              temp_new_target = max(temp_new_target - 1,id(stooklijn_target)-2);
+              temp_new_target = max(temp_new_target - 1,id(stooklijn_target)-3);
               ESP_LOGD(state_string[state], "Overshoot active or predicted, lowered pendel_target: %f",temp_new_target);
               break;
             }
@@ -322,7 +346,7 @@ lambda: !lambda |-
           break;
         }
         //4: check if silent mode needs to come off
-        if((temp_new_target >= (id(stooklijn_target)+2)||(temp_new_target == id(stooklijn_target) && delta < 2)) && (run_time - target_change_time > (10*60))){
+        if((temp_new_target >= (id(stooklijn_target)+3)||(temp_new_target == id(stooklijn_target) && delta < -2)) && (run_time - target_change_time > (10*60))){
           //rise is quite slow and target can not be raised further. Patience or intervention?
           //check if prediction indicated downtrent and check if compressor is not modulated
           if(id(silent_mode).state && (pred_20_delta_5 < 0 || pred_20_delta_10 < 0) && id(compressor_rpm).state > 50){
@@ -335,7 +359,7 @@ lambda: !lambda |-
         //5: raise target above stooklijn_target (to stop modulation)
         //derivative is low and there is room to raise (and raising may help)
         if((run_time - target_change_time) > (10*60)){
-          temp_new_target = min(id(stooklijn_target)+2,temp_new_target + 1);
+          temp_new_target = min(id(stooklijn_target)+3,temp_new_target + 1);
           ESP_LOGD(state_string[state], "tracking_value (almost) static, but room to raise pendel_target: %f",temp_new_target);
           break;
         }
@@ -355,10 +379,9 @@ lambda: !lambda |-
                 
         if(id(compressor_running).state){
           if(prev_state == SWW){
-            boost = true;
-            boost_start_time = run_time;
-            boost_offset = 2;
-            if( id(silent_mode).state && (oat <= id(oat_silent_always_off).state ||(oat <= id(oat_silent_boost).state && delta < -3))){
+            id(boost_switch).turn_on();
+            //silent mode boost
+            if( id(silent_mode).state && (oat < id(oat_silent_always_off).state ||(oat <= id(oat_silent_boost).state && delta < -3))){
               id(silent_mode_switch).turn_off();
             }
           }
@@ -370,8 +393,7 @@ lambda: !lambda |-
         break;
       }
       case SWW:
-        if(oat <= id(oat_silent_always_off).state && id(silent_mode).state) id(silent_mode_switch).turn_off();
-        else id(silent_mode_switch).turn_on();
+        if(oat > id(oat_silent_always_off).state && !id(silent_mode).state) id(silent_mode_switch).turn_on();
         if(!id(sww_heating).state){
           //sww run stopped
           if(!id(thermostat_signal).state){
@@ -395,7 +417,7 @@ lambda: !lambda |-
             break;
           }
           //after delay time, check current target and decide on silent mode
-          if(id(silent_mode).state && round(id(buiten_temp).state) < id(oat_silent_always_off).state) id(silent_mode_switch).turn_off();
+          if( id(silent_mode).state && ( oat < id(oat_silent_always_off).state||(delta < -2 && oat < id(oat_silent_boost).state) ) ) id(silent_mode_switch).turn_off();
           else if(!id(silent_mode).state) id(silent_mode_switch).turn_on(); 
           state = id(compressor_running).state ? RUN : WAIT;
         }
@@ -416,10 +438,9 @@ lambda: !lambda |-
         break;
       }
       case AFTERRUN: {
-        if(run_time - state_change_time > (id(minimum_run_time).state*60)){
-          id(relay_pump).turn_off();
-          state = IDLE;
-        }
+        if((run_time - state_change_time) < (id(external_pump_runover).state*60)) break;
+        id(relay_pump).turn_off();
+        state = IDLE;
         break;
       }
     }
