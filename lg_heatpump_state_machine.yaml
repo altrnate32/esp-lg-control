@@ -127,13 +127,17 @@ lambda: !lambda |-
           id(boost_switch).turn_off();
           id(boost_active).publish_state(false);
           boost_offset = 0;
-        }
+          id(update_stooklijn) = true;
+          id(controller_info).publish_state("Boost mode deactivated");
+        } 
       } else {
         //no, start boost mode
         boost = true;
         id(boost_active).publish_state(true);
         boost_start_time = run_time;
         boost_offset = 2;
+        id(update_stooklijn) = true;
+        id(controller_info).publish_state("Boost mode active");
       }
     } else {
       //boost switched off, did we know this?
@@ -142,6 +146,8 @@ lambda: !lambda |-
         boost = false;
         id(boost_active).publish_state(false);
         boost_offset = 0;
+        id(update_stooklijn) = true;
+        id(controller_info).publish_state("Boost mode deactivated");
       }
     }
    
@@ -160,10 +166,12 @@ lambda: !lambda |-
           id(derivative_value).publish_state(0);
           if(id(thermostat_signal).state) {
             state = START;
+            id(controller_info).publish_state("Init complete. First state: START");
           } else {
             id(relay_heat).turn_off();
             id(relay_pump).turn_off();
             state = IDLE;
+            id(controller_info).publish_state("Init complete. First state: IDLE");
           }
         }
         break;
@@ -184,6 +192,7 @@ lambda: !lambda |-
         if(!id(thermostat_signal).state){
           //thermostat switched off during on delay timer
           state = IDLE;
+          id(controller_info).publish_state("Thermostat switched off during on delay timer.");
           break;
         }
         //switch on external pump
@@ -348,18 +357,19 @@ lambda: !lambda |-
         }
         //4: check if silent mode needs to come off
         if((temp_new_target >= (id(stooklijn_target)+3)||(temp_new_target == id(stooklijn_target) && delta < -2)) && (run_time - target_change_time > (10*60))){
-          //rise is quite slow and target can not be raised further. Patience or intervention?
+          //rise is quite slow and/or target can not be raised further. Patience or intervention?
           //check if prediction indicated downtrent and check if compressor is not modulated
           if(id(silent_mode).state && (pred_20_delta_5 < 0 || pred_20_delta_10 < 0) && id(compressor_rpm).state > 50){
             //intervention
             id(silent_mode_switch).turn_off();
             ESP_LOGD(state_string[state], "tracking_value stalled, switched silent mode off");
+            id(controller_info).publish_state("Silent mode switched off to counter stall");
             break;
           }
         }
         //5: raise target above stooklijn_target (to stop modulation)
-        //derivative is low and there is room to raise (and raising may help)
-        if((run_time - target_change_time) > (10*60)){
+        //derivative is low and there is room to raise (and compressor is modulating, so raising may help)
+        if((run_time - target_change_time) > (10*60) && id(compressor_rpm).state <= 50){
           temp_new_target = min(id(stooklijn_target)+3,temp_new_target + 1);
           ESP_LOGD(state_string[state], "tracking_value (almost) static, but room to raise pendel_target: %f",temp_new_target);
           break;
@@ -379,13 +389,6 @@ lambda: !lambda |-
         if((run_time - state_change_time) < (10*60)) break;
                 
         if(id(compressor_running).state){
-          if(prev_state == SWW){
-            id(boost_switch).turn_on();
-            //silent mode boost
-            if( id(silent_mode).state && (oat < id(oat_silent_always_off).state ||(oat <= id(oat_silent_boost).state && delta < -3))){
-              id(silent_mode_switch).turn_off();
-            }
-          }
           state = RUN;
           break;
         }
@@ -402,6 +405,11 @@ lambda: !lambda |-
             break;
            } else {
             state = (id(compressor_running).state) ? RUN : WAIT;
+            id(boost_switch).turn_on();
+            //silent mode boost
+            if( id(silent_mode).state && (oat < id(oat_silent_always_off).state ||(oat <= id(oat_silent_boost).state && delta < -3))){
+              id(silent_mode_switch).turn_off();
+            }
             temp_new_target = id(stooklijn_target);
             break;
           }
