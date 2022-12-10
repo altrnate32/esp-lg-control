@@ -77,7 +77,7 @@ lambda: !lambda |-
     }
 
     //switch off check
-    if(state != INIT && state != IDLE && state != STABILIZE && state != HALT && state != AFTERRUN && state != DEFROST){
+    if(state != INIT && state != IDLE && state != STABILIZE && state != HALT && state != AFTERRUN){
       if(check_switch_off(state, run_time, run_start_time)){
         ESP_LOGD(state_string[state],"Detected valid switch off request");
         state = HALT;

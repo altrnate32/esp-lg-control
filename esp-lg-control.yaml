@@ -20,7 +20,8 @@ esphome:
           
 packages:
   config_values: !include config/config.yaml
-  lg_modbus: !include lg_heatpump_modbus.yaml
+  lg_modbus: !include lg_heatpump_modbus.yaml #include file with modbus sensors
+  lg_dallas_temp: !include lg_dallas_temp.yaml #optional file with dallas temp probes (disable if not used)
 
 # Enable logging. Disable modbus controller debug messages
 logger:
@@ -31,7 +32,7 @@ logger:
     esp32.preferences: WARN
     sensor: WARN
     text_sensor: WARN
-    dallas.sensor: WARN
+    dallas.sensor: WARN #disable if dallas is not used
     number: WARN
 
 globals:
@@ -221,9 +222,6 @@ interval:
     id: state_machine
     then: !include { file: lg_heatpump_state_machine.yaml }
 
-dallas:
-  - pin: 32
-
 binary_sensor:
   - platform: gpio # Thermostat input signal is connected to this input pin
     pin:
@@ -242,27 +240,6 @@ binary_sensor:
         return id(boost_bool);
 
 sensor:
-  - platform: dallas
-    address: 0x4a0122113a9bd528
-    name: "WPB Bottom Temperature"
-  - platform: dallas
-    address: 0xb9012211506ebf28
-    name: "WPB Top Temperature"
-  - platform: dallas
-    address: 0xe101221102a46b28
-    name: "Buffer Top Temperature"
-  - platform: dallas
-    address: 0xd7000801c04e3210
-    name: "Buffer Bottom Temperature"
-  - platform: dallas
-    address: 0xd10122112fc5ee28
-    name: "Inlet Junction Temperature"
-  - platform: dallas
-    address: 0x2403069794065c28
-    name: "Outlet Junction Temperature"
-  - platform: dallas
-    address: 0xbb03059497154628
-    name: "SWW Outlet Temperature"
   - platform: template
     name: "Stooklijn Watertemp Target"
     id: watertemp_target
