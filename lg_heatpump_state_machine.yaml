@@ -29,7 +29,7 @@ lambda: !lambda |-
     //configurable
     const static int hysteresis = 4; //Set controller control mode to 'outlet' and set hysteresis to the setting you have on the controller (recommend 4)
     const static int max_overshoot = 3; //maximum allowable overshoot in 'OVERSHOOT' state
-    const float tracking_value = floor(id(water_temp_retour).state); //Set to value that anti-pendel script will track (outlet/inlet) (recommend inlet)
+    const float tracking_value = floor(id(water_temp_aanvoer).state); //Set to value that anti-pendel script will track (outlet/inlet) (recommend inlet)
     const static int alive_timer = 120; //interval in seconds for an 'alive' message in the logs
         
     //control algoritm
@@ -69,6 +69,7 @@ lambda: !lambda |-
     if(id(update_stooklijn)||state==INIT||state==START) {
       calculate_stooklijn();
       id(stooklijn_target) = id(stooklijn_target) + boost_offset;
+      id(watertemp_target).publish_state(id(stooklijn_target));
     }
     if(id(stooklijn_target) != prev_stooklijn_target){
       //value changed, recalculate delta;
@@ -223,10 +224,10 @@ lambda: !lambda |-
         //always stabilize with silent on
         if(!id(silent_mode).state) id(silent_mode_switch).turn_on();
         //check how far we are in the run
-        if((run_time - run_start_time) > (20*60)){
+        if( (run_time - run_start_time) > (20*60) || ((run_time - run_start_time) > (6*60) && id(compressor_rpm).state <= 50)){
           //monitor situation
-          //we are stable if derivative => -2 and <= 2 or if compressor starts modulation
-           if(id(compressor_rpm).state <= 45 || ((derivative_D_10 * 60) >= -2 && (derivative_D_10 * 60) <= 2)){
+          //we are stable if derivative => -2 and <= 2 or if compressor starts modulation (after 6 minutes)
+           if(id(compressor_rpm).state <= 50 || ((derivative_D_10 * 60) >= -2 && (derivative_D_10 * 60) <= 2)){
             //hand over to run algoritm, run will decide on overshoot/undershoot depending on where we stabilized
             ESP_LOGD(state_string[state],"Stabilized, RUN is next");
             state = RUN;
@@ -235,9 +236,11 @@ lambda: !lambda |-
         } //else still early run
         //update target if tracking_value or stooklijn_target changed. No advanced modulation as this is useless during early run
         //limit number of updates to once every 5 minutes, unless run will be killed
-        if((run_time - target_change_time) > (5*60) || delta >= hysteresis){
-          temp_new_target = max(id(stooklijn_target)+stooklijn_target_offset,(float)tracking_value-2);
-          temp_new_target = min(temp_new_target,id(stooklijn_target)+max_overshoot);
+        if((run_time - target_change_time) > (5*60)){
+          if(delta >= hysteresis || delta > 1){
+            temp_new_target = max(id(stooklijn_target)+stooklijn_target_offset,(float)tracking_value-3);
+            temp_new_target = min(temp_new_target,id(stooklijn_target)+max_overshoot);
+          }
         }
         break;
       }

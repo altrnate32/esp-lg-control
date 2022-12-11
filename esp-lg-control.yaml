@@ -10,6 +10,7 @@ esphome:
     then:
       lambda: !lambda |-
           //instant on (in case of controller restart during run)
+          id(relay_external_heat).turn_off();
           if(id(thermostat_signal).state) {
             id(relay_pump).turn_on();
             id(relay_heat).turn_on();
@@ -196,11 +197,25 @@ switch:
     pin: 18
     id: relay_pump
     restore_mode: RESTORE_DEFAULT_OFF
+    inverted: true
   - platform: gpio
     name: "WP Heat"
     pin: 19
     id: relay_heat
     restore_mode: RESTORE_DEFAULT_OFF
+    inverted: true
+  - platform: gpio
+    name: "WP Backup Heater"
+    pin: 21
+    id: relay_external_heat
+    restore_mode: ALWAYS_OFF
+    inverted: true
+  - platform: gpio
+    name: "Relay 4"
+    pin: 22
+    id: relay_4
+    restore_mode: ALWAYS_OFF
+    inverted: true
   - platform: restart
     name: "ESP WP Control Restart"
   - platform: template

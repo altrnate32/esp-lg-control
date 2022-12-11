@@ -16,10 +16,17 @@ sensor:
     name: "Buffer Bottom Temperature"
   - platform: dallas
     address: 0xd10122112fc5ee28
-    name: "Inlet Junction Temperature"
+    name: "CV Supply Junction Temperature"
   - platform: dallas
     address: 0x2403069794065c28
-    name: "Outlet Junction Temperature"
+    name: "CV Return Junction Temperature"
   - platform: dallas
     address: 0xbb03059497154628
-    name: "SWW Outlet Temperature"
+    name: "SWW Supply Temperature"
+  - platform: dallas
+    address: 0x38030794971a4a28
+    name: "CV Supply Temperature"
+  - platform: dallas
+    address: 0x4503059497174a28
+    name: "CV Return Temperature"
+
