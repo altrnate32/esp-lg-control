@@ -16,7 +16,7 @@ modbus_controller:
   - id: lg
     address: 0x1 # the Modbus device addr
     modbus_id: modbus_lg
-    update_interval: 60s #this is our main 'clock' all dependel logic follows this pace
+    update_interval: 30s
     setup_priority: -10
 
 switch:
@@ -26,12 +26,14 @@ switch:
     id: silent_mode_switch
     register_type: coil
     address: 2
+    icon: mdi:volume-off
   - platform: modbus_controller
     name: "SWW On/Off"
     modbus_controller_id: lg
     id: sww_on_off
     register_type: coil
     address: 1
+    icon: mdi:shower-head
   
 binary_sensor:
   - platform: modbus_controller
@@ -41,6 +43,7 @@ binary_sensor:
     register_type: discrete_input
     skip_updates: 1
     address: 1
+    icon: mdi:pump
   - platform: modbus_controller
     modbus_controller_id: lg
     name: "Compressor Running"
@@ -48,6 +51,7 @@ binary_sensor:
     register_type: discrete_input
     skip_updates: 1
     address: 3
+    icon: mdi:car-turbocharger
   - platform: modbus_controller
     modbus_controller_id: lg
     name: "Defrosting"
@@ -55,6 +59,7 @@ binary_sensor:
     register_type: discrete_input
     skip_updates: 1
     address: 4
+    icon: mdi:snowflake-melt
   - platform: modbus_controller
     modbus_controller_id: lg
     name: "SWW Heating"
@@ -62,15 +67,7 @@ binary_sensor:
     register_type: discrete_input
     skip_updates: 1
     address: 5
-    on_state:
-      then:
-        - lambda: |-
-            static bool prev_sww_state = false;
-            if(x != prev_sww_state){
-              if(x && round(id(buiten_temp).state) > id(oat_silent_always_off).state) id(silent_mode_switch).turn_on();
-              else if(round(id(buiten_temp).state) < id(oat_silent_always_off).state) id(silent_mode_switch).turn_off();
-              prev_sww_state = x;
-            }
+    icon: mdi:shower-head
   - platform: modbus_controller
     modbus_controller_id: lg
     name: "Silent Mode"
@@ -78,6 +75,7 @@ binary_sensor:
     register_type: discrete_input
     skip_updates: 1
     address: 7
+    icon: mdi:volume-off
 
 sensor:
   - platform: modbus_controller
@@ -88,6 +86,7 @@ sensor:
     address: 1
     #skip_updates: 12
     value_type: U_WORD
+    icon: mdi:information-outline
   - platform: modbus_controller
     modbus_controller_id: lg
     name: "Water retour"
@@ -99,6 +98,7 @@ sensor:
     accuracy_decimals: 1
     filters:
       - multiply: 0.1
+    icon: mdi:thermometer-chevron-down
   - platform: modbus_controller
     modbus_controller_id: lg
     name: "Water aanvoer"
@@ -110,6 +110,7 @@ sensor:
     accuracy_decimals: 1
     filters:
       - multiply: 0.1
+    icon: mdi:thermometer-chevron-up
   - platform: modbus_controller
     modbus_controller_id: lg
     name: "SWW Temperatuur"
@@ -121,6 +122,7 @@ sensor:
     accuracy_decimals: 1
     filters:
       - multiply: 0.1
+    icon: mdi:thermometer-water
   - platform: modbus_controller
     modbus_controller_id: lg
     name: "Garagetemperatuur"
@@ -132,6 +134,7 @@ sensor:
     accuracy_decimals: 1
     filters:
       - multiply: 0.1
+    icon: mdi:garage-open-variant
   - platform: modbus_controller
     modbus_controller_id: lg
     name: "Flow Rate"
@@ -146,6 +149,7 @@ sensor:
     lambda: |-
       if(x > 5) return x;
       else return 0.0;
+    icon: mdi:waves-arrow-right
   - platform: modbus_controller
     modbus_controller_id: lg
     name: "Buitentemperatuur"
@@ -155,11 +159,12 @@ sensor:
     unit_of_measurement: "°C"
     value_type: S_WORD
     accuracy_decimals: 1
+    icon: mdi:weather-cloudy
     filters:
       - multiply: 0.1
       - sliding_window_moving_average:
-          window_size: 15
-          send_every: 15
+          window_size: 30
+          send_every: 30
     on_value:
       then:
         - lambda: !lambda |-
@@ -210,7 +215,7 @@ sensor:
       - multiply: 0.1
   - platform: modbus_controller
     modbus_controller_id: lg
-    name: "Condensor Temp"
+    name: "Condenser Temp"
     id: condensor_temp
     register_type: read
     address: 20
@@ -219,6 +224,7 @@ sensor:
     accuracy_decimals: 1
     filters:
       - multiply: 0.1
+    icon: mdi:hvac
   - platform: modbus_controller
     modbus_controller_id: lg
     name: "WP Sensed Power"
@@ -228,6 +234,7 @@ sensor:
     value_type: U_WORD
     accuracy_decimals: 0
     unit_of_measurement: "W"
+    icon: mdi:meter-electric-outline
   - platform: modbus_controller
     modbus_controller_id: lg
     name: "Pressure 2"
@@ -248,6 +255,7 @@ sensor:
     unit_of_measurement: "RPM"
     value_type: U_WORD
     accuracy_decimals: 0
+    icon: mdi:car-turbocharger
   - platform: modbus_controller
     modbus_controller_id: lg
     name: "Doeltemperatuur"
@@ -260,6 +268,7 @@ sensor:
     skip_updates: 3
     filters:
       - multiply: 0.1
+    icon: mdi:home-thermometer-outline
   - platform: modbus_controller
     modbus_controller_id: lg
     name: "SWW Doeltemperatuur"
@@ -272,6 +281,7 @@ sensor:
     skip_updates: 3
     filters:
       - multiply: 0.1
+    icon: mdi:thermometer-water
 
 number:
   - platform: modbus_controller

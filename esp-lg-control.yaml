@@ -10,7 +10,7 @@ esphome:
     then:
       lambda: !lambda |-
           //instant on (in case of controller restart during run)
-          id(relay_external_heat).turn_off();
+          id(relay_backup_heat).turn_off();
           if(id(thermostat_signal).state) {
             id(relay_pump).turn_on();
             id(relay_heat).turn_on();
@@ -61,6 +61,7 @@ number:
     restore_value: yes
     unit_of_measurement: "°C"
     optimistic: true
+    icon: mdi:plus-minus-variant
     set_action:
       then:
         lambda: !lambda |-
@@ -68,12 +69,13 @@ number:
   - platform: template
     id: stooklijn_curve
     name: "Stooklijn Curve"
-    min_value: 0
+    min_value: -6
     max_value: 6
-    step: 1
+    step: 0.5
     restore_value: yes
-    initial_value: 3
+    initial_value: -3
     optimistic: true
+    icon: mdi:chart-bell-curve-cumulative
     set_action:
       then:
         lambda: !lambda |-
@@ -85,9 +87,10 @@ number:
     max_value: 0
     step: 1
     restore_value: yes
-    initial_value: -15
+    initial_value: -10
     unit_of_measurement: "°C"
     optimistic: true
+    icon: mdi:download-circle-outline
     set_action:
       then:
         lambda: !lambda |-
@@ -99,9 +102,10 @@ number:
     max_value: 60
     step: 1
     restore_value: yes
-    initial_value: 45
+    initial_value: 46
     unit_of_measurement: "°C"
     optimistic: true
+    icon: mdi:waves-arrow-right
     set_action:
       then:
         lambda: !lambda |-
@@ -113,9 +117,10 @@ number:
     max_value: 40
     step: 1
     restore_value: yes
-    initial_value: 25
+    initial_value: 28
     unit_of_measurement: "°C"
     optimistic: true
+    icon: mdi:waves-arrow-left
     set_action:
       then:
         lambda: !lambda |-
@@ -130,6 +135,7 @@ number:
     initial_value: 30
     unit_of_measurement: "min"
     optimistic: true
+    icon: mdi:timer-sync-outline
   - platform: template
     id: external_pump_runover
     name: "External pump overrun"
@@ -140,6 +146,7 @@ number:
     initial_value: 10
     unit_of_measurement: "min"
     optimistic: true
+    icon: mdi:timer-cog-outline
   - platform: template
     id: oat_silent_always_off
     name: "Buitentemperatuur silent always off"
@@ -147,12 +154,13 @@ number:
     max_value: 10
     step: 1
     restore_value: yes
-    initial_value: -10
+    initial_value: 2
     unit_of_measurement: "°C"
     optimistic: true
+    icon: mdi:volume-plus
   - platform: template
-    id: oat_silent_boost
-    name: "Buitentemperatuur silent boost"
+    id: oat_silent_always_on
+    name: "Buitentemperatuur silent always on"
     min_value: -20
     max_value: 20
     step: 1
@@ -160,6 +168,7 @@ number:
     initial_value: 6
     unit_of_measurement: "°C"
     optimistic: true
+    icon: mdi:volume-off
   - platform: template
     id: thermostat_off_delay
     name: "Thermostat off delay"
@@ -170,6 +179,7 @@ number:
     initial_value: 1
     unit_of_measurement: "min"
     optimistic: true
+    icon: mdi:timer-off-outline
   - platform: template
     id: thermostat_on_delay
     name: "Thermostat on delay"
@@ -180,6 +190,7 @@ number:
     initial_value: 0
     unit_of_measurement: "min"
     optimistic: true
+    icon: mdi:timer
   - platform: template
     id: boost_time
     name: "Boost duration"
@@ -190,6 +201,17 @@ number:
     initial_value: 60
     unit_of_measurement: "min"
     optimistic: true
+    icon: mdi:timer-plus-outline
+  - platform: template
+    id: backup_heater_active_temp
+    name: "Buitentemperatuur backup heater active"
+    min_value: -30
+    max_value: 20
+    step: 1
+    restore_value: yes
+    initial_value: 2
+    optimistic: true
+    icon: mdi:gas-burner
 
 switch:
   - platform: gpio
@@ -198,18 +220,21 @@ switch:
     id: relay_pump
     restore_mode: RESTORE_DEFAULT_OFF
     inverted: true
+    icon: mdi:pump
   - platform: gpio
     name: "WP Heat"
     pin: 19
     id: relay_heat
     restore_mode: RESTORE_DEFAULT_OFF
     inverted: true
+    icon: mdi:power
   - platform: gpio
     name: "WP Backup Heater"
     pin: 21
-    id: relay_external_heat
+    id: relay_backup_heat
     restore_mode: ALWAYS_OFF
     inverted: true
+    icon: mdi:gas-burner
   - platform: gpio
     name: "Relay 4"
     pin: 22
@@ -231,6 +256,7 @@ switch:
       - globals.set:
           id: boost_bool
           value: 'false'
+    icon: mdi:thermometer-plus
 
 interval:
   - interval: 30s
@@ -248,11 +274,13 @@ binary_sensor:
     id: thermostat_signal
     filters:
       - delayed_on: 500ms # Debounce
+    icon: mdi:thermostat
   - platform: template
     name: "Boost mode active"
     id: boost_active
     lambda: |-
         return id(boost_bool);
+    icon: mdi:thermometer-plus
 
 sensor:
   - platform: template
@@ -260,6 +288,7 @@ sensor:
     id: watertemp_target
     unit_of_measurement: "°C"
     update_interval: never
+    icon: mdi:home-thermometer-outline
   - platform: wifi_signal
     name: "${device_name} WiFi Signal"
     update_interval: 120s
@@ -279,12 +308,14 @@ sensor:
     lambda: |-
       return (float)(id(water_temp_aanvoer).state-id(water_temp_retour).state); 
     update_interval: 60s
+    icon: mdi:delta
   - platform: template
     name: "Derivative"
     id: derivative_value
     accuracy_decimals: 1
     unit_of_measurement: "°C/h" 
     update_interval: never  
+    icon: mdi:sigma
 # Sensors for ESP version and WIFI information
 text_sensor:
   - platform: version
@@ -292,13 +323,17 @@ text_sensor:
   - platform: wifi_info
     ip_address:
       name: "${device_name} ip"
+      icon: mdi:ip-network
     ssid:
       name: "${device_name} ssid"
+      icon: mdi:wifi-marker
   - platform: template
     name: "Controller state"
     id: controller_state
     update_interval: never
+    icon: mdi:state-machine
   - platform: template
     name: "Controller info"
     id: controller_info
     update_interval: never
+    icon: mdi:memory

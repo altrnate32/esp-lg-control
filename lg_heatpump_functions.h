@@ -42,7 +42,7 @@
     }
   
     //calculate stooklijn function
-    void calculate_stooklijn(){
+    void calculate_stooklijn(int boost_offset = 0){
       //Calculate stooklijn target
       //Hold previous script run oat value
       static float prev_oat = 20; //oat at minimum water temp (20/20) to prevent strange events on startup
@@ -60,7 +60,7 @@
       //OAT expects start temp to be OAT 20 with Watertemp 20. Steepness is defined bij Z, calculated by the max wTemp at minOat
       //Formula is wTemp = ((Z x (20 - OAT)) + 20) + C 
       //Formula to calculate Z = 0-((stooklijn_max_wtemp-20)) / (stooklijn_min_oat - stooklijn_start_temp))
-      //C is the curvature of the stooklijn defined by C = (stooklijn_curve*0.001)*sqrt(oat-20)
+      //C is the curvature of the stooklijn defined by C = (stooklijn_curve*0.001)*(oat-20)^2
       //This will add a positive offset with decreasing offset. You can set this to zero if you don't need it and want a linear stooklijn
       //I need it in my installation as the stooklijn is spot on at relative high temperatures, but too low at lower temps
       const float Z =  0 - (float)( (id(stooklijn_max_wtemp).state-20)/(id(stooklijn_min_oat).state - 20));
@@ -70,6 +70,8 @@
       id(stooklijn_target) = (int)round( (Z * (20-oat))+20+C);
       //Add stooklijn offset
       id(stooklijn_target) = id(stooklijn_target) + id(wp_stooklijn_offset).state;
+      //Add boost offset
+       id(stooklijn_target) = id(stooklijn_target) + boost_offset;
       //Clamp target to minimum temp/max water+3
       clamp(id(stooklijn_target),id(stooklijn_min_wtemp).state,id(stooklijn_max_wtemp).state+3);
       ESP_LOGD("calculate_stooklijn", "Stooklijn calculated with oat: %f, Z: %f, C: %f offset: %f, result: %f",oat, Z, C, id(wp_stooklijn_offset).state, id(stooklijn_target));
