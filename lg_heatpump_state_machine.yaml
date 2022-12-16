@@ -31,9 +31,11 @@ lambda: !lambda |-
     const static int max_overshoot = 3; //maximum allowable overshoot in 'OVERSHOOT' state
     const float tracking_value = floor(id(water_temp_aanvoer).state); //Set to value that anti-pendel script will track (outlet/inlet) (recommend inlet)
     const static int alive_timer = 120; //interval in seconds for an 'alive' message in the logs
-        
+    const static float backup_heater_cop_limit = 1.8; //below which cop should the backup heater be switched on? Set to a large negative number (example -1000) to disable
+
     //control algoritm
     static std::vector<float> derivative; //vector of floats to integrate derivative (used in control logic)
+    static std::vector<float> cop_vector; //vector of floats to integrate cop
     const float oat = round(id(buiten_temp).state); //outside air temperature
     static float temp_new_target = id(stooklijn_target); //anti-pendel target
     static float prev_stooklijn_target = id(stooklijn_target); //hold previous value of stooklijn target, to check for change
@@ -45,9 +47,11 @@ lambda: !lambda |-
     float pred_20_delta_10 = 0; //predicted delta in 20 minutes based on last 10 minute derivative
     float pred_5_delta_5 = 0; //predicted delta in 5 minutes based on last 5 minute derivative
     static int stooklijn_target_offset = -3; //offset at start of run
-    static int boost_offset = 0;
-    static bool boost = false;
-    bool compressor_modulation = false;
+    static int boost_offset = 0; //keep track of offset during boost mode. Will be 0 if boost is not active
+    static bool boost = false; //is boost active or not
+    bool compressor_modulation = false; //is the compressor modulating
+    static float average_cop = 0; //keep track off average cop during last 15 minutes
+    static bool backup_heat_cop_limit_trigger = false; //if backup heat triggered due to low cop?
 
     run_time += dt;
     if(run_time % alive_timer == 0){
@@ -59,7 +63,7 @@ lambda: !lambda |-
     //***************************************************************
     //if oat >= silent always on: silent on
     //if oat <= silent always off: silent off
-    //if in between: if boost or stall silent of otherwise silent on
+    //if in between: if boost or stall silent off otherwise silent on
 
     if(oat >= id(oat_silent_always_on).state) {
       if(!id(silent_mode).state){
@@ -70,7 +74,7 @@ lambda: !lambda |-
       }
     } else if(oat <= id(oat_silent_always_off).state){
       if(id(silent_mode).state){
-        ESP_LOGD(state_string[state],"Oat < oat_silent_always_in Switching silent mode off");
+        ESP_LOGD(state_string[state],"Oat < oat_silent_always_on Switching silent mode off");
         id(controller_info).publish_state("Switching silent mode off oat < oat_silent_always_off");
         id(silent_mode_switch).turn_off();
         id(silent_mode).publish_state(false);
@@ -96,31 +100,42 @@ lambda: !lambda |-
 
     //************************Backup Heater*************************
 
-    //Switch always off in these case
+    //Switch always off in these cases
     if(id(relay_backup_heat).state){
       if(state == INIT || state == IDLE || state == OVERSHOOT || state == HALT || state == AFTERRUN){
         id(relay_backup_heat).turn_off();
         ESP_LOGD(state_string[state],"Backup heat off due to incompatible state");
         id(controller_info).publish_state("Backup heat off due to state change");
-      }
-    
-      if(oat > id(backup_heater_active_temp).state){
+      } else if(oat > id(backup_heater_active_temp).state){
         id(relay_backup_heat).turn_off();
         ESP_LOGD(state_string[state],"Backup heat off oat > backup_heater_active_temp");
         id(controller_info).publish_state("Backup heat off due to high oat");
-      }
-      if(!id(relay_heat).state){
+      } else if(!id(relay_heat).state){
         //no heat request, why is backup heat on? (probably due to SWW?
         id(relay_backup_heat).turn_off();
         ESP_LOGD(state_string[state],"Backup heat off no heat request (relay_heat off)");
         id(controller_info).publish_state("Backup heat off due to no heat request");
+      } else if(backup_heat_cop_limit_trigger && average_cop > 0.0 && average_cop > (backup_heater_cop_limit+0.2) ){
+        //if triggered due to low cop and situation improved (with some hysteresis)
+        id(relay_backup_heat).turn_off();
+        ESP_LOGD(state_string[state],"Backup heat off no cop improved");
+        id(controller_info).publish_state("Backup heat off due to cop improvement");
+        backup_heat_cop_limit_trigger = false;
       }
-      //make sure external pump is running when backup heat is on
-      if(!id(relay_pump).state){
-        id(relay_pump).turn_on();
-        ESP_LOGD(state_string[state],"Exernal pump switch on because backup heat is on");
-        id(controller_info).publish_state("External pump on due to backup heat on.");
+    } else {
+      backup_heat_cop_limit_trigger = false; //reset value
+      //switch on in case of low average cop (for at least 15 minutes)
+      if( (state == RUN || state == STALL)&&(oat <= id(backup_heater_active_temp).state && average_cop > 0.0 && average_cop < backup_heater_cop_limit) ){
+        id(relay_backup_heat).turn_on();
+        backup_heat_cop_limit_trigger = true;
+        id(controller_info).publish_state("Backup heat on due to low COP");
       }
+    }
+    //make sure external pump is running when backup heat is on
+    if(id(relay_backup_heat).state && !id(relay_pump).state){
+      id(relay_pump).turn_on();
+      ESP_LOGD(state_string[state],"Exernal pump switch on because backup heat is on");
+      id(controller_info).publish_state("External pump on due to backup heat on.");
     }
     //backup heater will be turned on and off by SWW, DEFROST and sometimes STALL
 
@@ -150,6 +165,29 @@ lambda: !lambda |-
       derivative.clear();
       id(derivative_value).publish_state(0);
     }
+    //if running for heating record COP
+    if(state == STABILIZE || state == RUN || state == OVERSHOOT || state == STALL){
+      float current_cop = id(cop_guess).state;
+      //prevent invalid readings
+      if(current_cop > 0.5) cop_vector.push_back(current_cop);
+      //limit size to 30 elements(15 minutes)
+      if(cop_vector.size() > 31) cop_vector.erase(cop_vector.begin());
+      if(cop_vector.size() > 10) {
+        //after at least 10 readings
+        std::vector<float>::iterator it;
+        float it_total = 0;
+        for(it = cop_vector.begin(); it != cop_vector.end(); it++){
+          it_total += *it;
+        }
+        average_cop = it_total/cop_vector.size();
+        id(average_cop_sensor).publish_state(average_cop);
+      }
+    } else {
+      cop_vector.clear();
+      average_cop = 0;
+      id(average_cop_sensor).publish_state(0);
+    }
+    
     //make sure there is always a prediction even with derivative = 0
     pred_20_delta_5 = (tracking_value + (derivative_D_5*20)) - id(stooklijn_target);
     pred_20_delta_10 = (tracking_value + (derivative_D_10*20)) - id(stooklijn_target);
@@ -221,6 +259,8 @@ lambda: !lambda |-
         //early start. Be patient until everything is set up
         if(run_time > 60 && !isnan(id(buiten_temp).state) && !isnan(id(water_temp_aanvoer).state) && !isnan(id(water_temp_retour).state) && !isnan(tracking_value)){
           id(derivative_value).publish_state(0);
+          id(average_cop_sensor).publish_state(0);
+          calculate_stooklijn(boost_offset);
           if(id(thermostat_signal).state) {
             state = START;
             id(controller_info).publish_state("Init complete. First state: START");
@@ -446,9 +486,11 @@ lambda: !lambda |-
       case SWW:
         //only when first entering SWW mode
         if(prev_state != SWW){
-          if(oat <= id(backup_heater_active_temp).state && !id(relay_backup_heat).state){
+          if(oat <= id(backup_heater_active_temp).state && !id(relay_backup_heat).state && id(relay_heat).state){
             id(relay_backup_heat).turn_on();
             id(controller_info).publish_state("SWW backup heat on.");
+          } else {
+            id(controller_info).publish_state("SWW with backup heat off.");
           }
         }
         if(!id(sww_heating).state){
@@ -458,7 +500,10 @@ lambda: !lambda |-
           } else {
             state = (id(compressor_running).state) ? RUN : WAIT;
             //start boost if we were running without backup heat
-            if(oat > id(backup_heater_active_temp).state) id(boost_switch).turn_on();
+            if(!id(relay_backup_heat).state){
+              if(oat > id(backup_heater_active_temp).state) id(boost_switch).turn_on();
+              id(controller_info).publish_state("SWW done starting boost.");
+            }
             temp_new_target = id(stooklijn_target);
             break;
           }
@@ -481,8 +526,14 @@ lambda: !lambda |-
             state = IDLE;
             break;
           }
-          //backup heater will be switched off by backup heater logic
-          state = id(compressor_running).state ? STALL : WAIT;
+          if(id(compressor_running).state){
+            if(delta > 0){
+              id(relay_backup_heat).turn_off();
+              state = RUN;
+            } else state = STALL;
+          } else state = WAIT;
+          if(id(relay_backup_heat).state) id(controller_info).publish_state("DEFROST done backup heat still on.");
+          else id(controller_info).publish_state("DEFROST done backup heat off.");
         }
         break;
       }

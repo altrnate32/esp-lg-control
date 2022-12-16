@@ -1,32 +1,63 @@
 dallas:
   - pin: 32
+    update_interval: 30s
 
 sensor:
   - platform: dallas
     address: 0x4a0122113a9bd528
     name: "WPB Bottom Temperature"
+    icon: mdi:arrow-collapse-down
   - platform: dallas
     address: 0xb9012211506ebf28
     name: "WPB Top Temperature"
-  - platform: dallas
-    address: 0xe101221102a46b28
-    name: "Buffer Top Temperature"
-  - platform: dallas
-    address: 0xd7000801c04e3210
-    name: "Buffer Bottom Temperature"
-  - platform: dallas
-    address: 0xd10122112fc5ee28
-    name: "CV Supply Junction Temperature"
-  - platform: dallas
-    address: 0x2403069794065c28
-    name: "CV Return Junction Temperature"
+    icon: mdi:arrow-collapse-up
   - platform: dallas
     address: 0xbb03059497154628
     name: "SWW Supply Temperature"
+    icon: mdi:faucet
+  - platform: dallas
+    address: 0x0a03049497049628
+    name: "WP Supply Temperature"
+    id: wp_out_temp
+    filters:
+      - offset: 1.4
+    icon: mdi:thermometer-chevron-up
+  - platform: dallas
+    address: 0xd10122112fc5ee28
+    name: "Buffer Top Supply Temperature"
+    filters:
+      - offset: 3.9
+    icon: mdi:alpha-t-circle-outline
+  - platform: dallas
+    address: 0xe101221102a46b28
+    name: "Buffer Top Temperature"
+    icon: mdi:fridge-top
   - platform: dallas
     address: 0x38030794971a4a28
     name: "CV Supply Temperature"
+    filters:
+      - offset: 2.8
+    icon: mdi:radiator
   - platform: dallas
     address: 0x4503059497174a28
     name: "CV Return Temperature"
-
+    filters:
+      - offset: 1.7
+    icon: mdi:radiator-disabled
+  - platform: dallas
+    address: 0xf30310949740b428
+    name: "Buffer Bottom Supply Temperature"
+    filters:
+      - offset: 3.9
+    icon: mdi:alpha-t-circle-outline
+  - platform: dallas
+    address: 0xd7000801c04e3210
+    name: "Buffer Bottom Temperature"
+    icon: mdi:fridge-bottom
+  - platform: dallas
+    address: 0x2403069794065c28
+    name: "WP Return Temperature"
+    id: wp_return_temp
+    filters:
+      - offset: 5.5
+    icon: mdi:alpha-t-circle-outline
