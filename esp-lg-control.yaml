@@ -214,6 +214,10 @@ number:
     icon: mdi:gas-burner
 
 switch:
+#  - platform: template
+#    name: "Termostat On"
+#    id: thermostat_signal
+#    optimistic: true
   - platform: gpio
     name: "WP External Pump"
     pin: 18
@@ -221,6 +225,10 @@ switch:
     restore_mode: RESTORE_DEFAULT_OFF
     inverted: true
     icon: mdi:pump
+#  - platform: template
+#    name: "Dummy external pump relay"
+#    id: "relay_heat"
+#    optimistic: true
   - platform: gpio
     name: "WP Heat"
     pin: 19
@@ -228,6 +236,10 @@ switch:
     restore_mode: RESTORE_DEFAULT_OFF
     inverted: true
     icon: mdi:power
+#  - platform: template
+#    name: "Dummy heat relay"
+#    id: "relay_heat"
+#    optimistic: true
   - platform: gpio
     name: "WP Backup Heater"
     pin: 21
@@ -235,6 +247,10 @@ switch:
     restore_mode: ALWAYS_OFF
     inverted: true
     icon: mdi:gas-burner
+#  - platform: template
+#    name: "Dummy backup_heat relay"
+#    id: "relay_backup_heat"
+#    optimistic: true
   - platform: gpio
     name: "Relay 4"
     pin: 22
