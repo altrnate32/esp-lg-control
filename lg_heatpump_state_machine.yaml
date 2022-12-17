@@ -18,13 +18,14 @@ lambda: !lambda |-
     //state machine
     static States state = INIT;
     static States prev_state = INIT;
-    static uint32_t run_time = 0; //total esp boot time
-    static uint32_t run_start_time = 0; //run_time value upon start of heat run
-    static uint32_t state_change_time = 0; //run_time value upon previous state change
-    static uint32_t compressor_time = 0; //run_time value on last compressor start
-    static uint32_t target_change_time = 0; //run_time value on last pendel_target change
-    static uint32_t dt = round(id(state_machine).get_update_interval()/1000); //update interval in seconds
-    static uint32_t boost_start_time = 0; //time since boost started (boost is raising the stooklijn by 2 degrees for 1 hour to bring temperature back)
+    static uint_fast32_t run_time = 0; //total esp boot time
+    static uint_fast32_t run_start_time = 0; //run_time value upon start of heat run
+    static uint_fast32_t state_change_time = 0; //run_time value upon previous state change
+    static uint_fast32_t compressor_time = 0; //run_time value on last compressor start
+    static uint_fast32_t target_change_time = 0; //run_time value on last pendel_target change
+    static uint_fast32_t dt = round(id(state_machine).get_update_interval()/1000); //update interval in seconds
+    static uint_fast32_t boost_start_time = 0; //time since boost started (boost is raising the stooklijn by 2 degrees for 1 hour to bring temperature back)
+    static uint_fast32_t backup_heat_change_time = 0; //time since last backup heat switch
 
     //configurable
     const static int hysteresis = 4; //Set controller control mode to 'outlet' and set hysteresis to the setting you have on the controller (recommend 4)
@@ -41,8 +42,8 @@ lambda: !lambda |-
     static float prev_stooklijn_target = id(stooklijn_target); //hold previous value of stooklijn target, to check for change
     float delta = tracking_value-id(stooklijn_target); //Current Error value negative below target, positive above target
     const float pendel_delta = tracking_value-temp_new_target; //Error value in regard to pendel target
-    float derivative_D_5 = 0; //derivative based on past 5 minutes
-    float derivative_D_10 = 0; //derivative based on past 10 minutes
+    static float derivative_D_5 = 0; //derivative based on past 5 minutes
+    static float derivative_D_10 = 0; //derivative based on past 10 minutes
     float pred_20_delta_5 = 0; //predicted delta in 20 minutes based on last 5 minute derivative
     float pred_20_delta_10 = 0; //predicted delta in 20 minutes based on last 10 minute derivative
     float pred_5_delta_5 = 0; //predicted delta in 5 minutes based on last 5 minute derivative
@@ -52,6 +53,7 @@ lambda: !lambda |-
     bool compressor_modulation = false; //is the compressor modulating
     static float average_cop = 0; //keep track off average cop during last 15 minutes
     static bool backup_heat_cop_limit_trigger = false; //if backup heat triggered due to low cop?
+    static bool prev_backup_heater_state = id(relay_backup_heat).state;
 
     run_time += dt;
     if(run_time % alive_timer == 0){
@@ -125,10 +127,13 @@ lambda: !lambda |-
     } else {
       backup_heat_cop_limit_trigger = false; //reset value
       //switch on in case of low average cop (for at least 15 minutes)
-      if( (state == RUN || state == STALL)&&(oat <= id(backup_heater_active_temp).state && average_cop > 0.0 && average_cop < backup_heater_cop_limit) ){
-        id(relay_backup_heat).turn_on();
-        backup_heat_cop_limit_trigger = true;
-        id(controller_info).publish_state("Backup heat on due to low COP");
+      if( (state == RUN || state == STALL)&&(oat <= id(backup_heater_active_temp).state && average_cop > 0.0 && average_cop < backup_heater_cop_limit && id(cop_guess).state < 2) ){
+        //do not switch on if last switch off was not at least 10 minutes ago.
+        if(run_time - backup_heat_change_time > (15*60)){
+          id(relay_backup_heat).turn_on();
+          backup_heat_cop_limit_trigger = true;
+          id(controller_info).publish_state("Backup heat on due to low COP");
+        }
       }
     }
     //make sure external pump is running when backup heat is on
@@ -152,7 +157,8 @@ lambda: !lambda |-
     if(state != INIT && state != IDLE && state != STABILIZE && state != HALT && state != AFTERRUN){
       if(check_switch_off(state, run_time, run_start_time)){
         ESP_LOGD(state_string[state],"Detected valid switch off request");
-        state = HALT;
+        if(state != SWW && state != DEFROST) state = HALT;
+        else id(relay_heat).turn_off();
       }
     }
 
@@ -352,36 +358,36 @@ lambda: !lambda |-
             state = OVERSHOOT;
             break;
           }
-        }else {
-          //when we are here, it means we where in a stable condition running on stooklijn_target
-          //check if overshooting predicted, or if operating > 2 degrees below target (stall)
-          //check predicted delta to reach in 20 minutes (pred_20_delta_5 and pred_20_delta_10)
-          //first check if emergency condition (should not be the case but...)
-          if(pendel_delta >= hysteresis){
-            state = OVERSHOOT;
-            break;
-          }
-          //then check if we have been in the current state for at least 5 minutes (to prevent over control)
-          if((run_time - state_change_time) < (5*60)) break;
-          //then check the predicted overshoot
-          if(delta >= 2 && (pred_20_delta_5 >= 3 || pred_20_delta_10 >= 3)){
-            //start overshooting algoritm to bring temperature back
-            ESP_LOGD(state_string[state],"New state will be overshoot. target: %f stooklijn_target: %f delta: %f pred_20_delta_5: %f pred_20_delta_10: %f",temp_new_target,id(stooklijn_target),delta,pred_20_delta_5,pred_20_delta_10);
-            state = OVERSHOOT;
-            break;
-          } else if(delta <= -2.5 || (delta <= -1 && (pred_20_delta_5 < -3 || pred_20_delta_10 < -3))){
-            //stall, or stall predicted
-            ESP_LOGD(state_string[state],"New state will be stall. target: %f stooklijn_target: %f delta: %f pred_20_delta_5: %f pred_20_delta_10: %f",temp_new_target,id(stooklijn_target),delta,pred_20_delta_5,pred_20_delta_10);
-            state = STALL;
-            break;
-          } //else status quo
-        }       
+        }
+
+        //when we are here, it means we where in a stable condition running on stooklijn_target
+        //check if overshooting predicted, or if operating > 2 degrees below target (stall)
+        //check predicted delta to reach in 20 minutes (pred_20_delta_5 and pred_20_delta_10)
+        //first check if emergency condition (should not be the case but...)
+        if(pendel_delta >= hysteresis){
+          state = OVERSHOOT;
+          break;
+        }
+        //then check if we have been in the current state for at least 5 minutes (to prevent over control)
+        if((run_time - state_change_time) < (5*60)) break;
+        //then check the predicted overshoot
+        if(delta >= 1 && (pred_20_delta_5 >= 2.5 || pred_20_delta_10 >= 2.5)){
+          //start overshooting algoritm to bring temperature back
+          ESP_LOGD(state_string[state],"New state will be overshoot. target: %f stooklijn_target: %f delta: %f pred_20_delta_5: %f pred_20_delta_10: %f",temp_new_target,id(stooklijn_target),delta,pred_20_delta_5,pred_20_delta_10);
+          state = OVERSHOOT;
+          break;
+        } else if(delta <= -2 || (delta <= -1 && (pred_20_delta_5 < -3 || pred_20_delta_10 < -3))){
+          //stall, or stall predicted
+          ESP_LOGD(state_string[state],"New state will be stall. target: %f stooklijn_target: %f delta: %f pred_20_delta_5: %f pred_20_delta_10: %f",temp_new_target,id(stooklijn_target),delta,pred_20_delta_5,pred_20_delta_10);
+          state = STALL;
+          break;
+        } //else status quo       
         break;
       }
       case OVERSHOOT: {
         //overshooting logic
         //logic to contain overshoot and then return back to target
-        if(delta < 2 && pred_20_delta_5 < 2 && pred_20_delta_10 < 2 ){
+        if(delta < 1 && pred_20_delta_5 < 1.5 && pred_20_delta_10 < 1.5 ){
           //delta within range, are we done?
           if(temp_new_target <= id(stooklijn_target)){
             //overshoot contained operating below or at target
@@ -486,16 +492,21 @@ lambda: !lambda |-
       case SWW:
         //only when first entering SWW mode
         if(prev_state != SWW){
-          if(oat <= id(backup_heater_active_temp).state && !id(relay_backup_heat).state && id(relay_heat).state){
-            id(relay_backup_heat).turn_on();
-            id(controller_info).publish_state("SWW backup heat on.");
+          if(oat <= id(backup_heater_active_temp).state && id(relay_heat).state){
+            if(!id(relay_backup_heat).state){
+              id(relay_backup_heat).turn_on();
+            }
+            id(controller_info).publish_state("SWW with backup heat on.");
           } else {
             id(controller_info).publish_state("SWW with backup heat off.");
           }
         }
         if(!id(sww_heating).state){
           if(!id(thermostat_signal).state){
-            state = IDLE;
+            //straight off if no thermostat signal after SWW
+            state = AFTERRUN;
+            id(relay_heat).turn_off();
+            id(relay_backup_heat).turn_off();
             break;
           } else {
             state = (id(compressor_running).state) ? RUN : WAIT;
@@ -523,7 +534,10 @@ lambda: !lambda |-
           //10 minute delay (defrost takes 4 minutes) some additional delay to allow values to stabilize and backup heater to run
           if((run_time - state_change_time) < (10*60)) break;
           if(!id(thermostat_signal).state){
-            state = IDLE;
+            //straight off if no thermostat signal after SWW
+            state = AFTERRUN;
+            id(relay_heat).turn_off();
+            id(relay_backup_heat).turn_off();
             break;
           }
           if(id(compressor_running).state){
@@ -560,7 +574,8 @@ lambda: !lambda |-
         break;
       }
     }
-        
+
+    //Update modbus target if temp_new_target has changed    
     if((float)temp_new_target != (float)id(doel_temp).state && state != INIT){
       //prevent update while still in INIT
       //Update target through modbus
@@ -568,12 +583,21 @@ lambda: !lambda |-
       id(doel_temp).publish_state(temp_new_target*10);
       target_change_time = run_time;
     }
-    
+    //Keep track of state updates
     if(state != prev_state){
       id(controller_state).publish_state(state_string_friendly[state]);
       state_change_time = run_time;
       prev_state = state;
       ESP_LOGD(state_string[state],"State change: %s",state_string[state]);
     }
+
+    //keep track of stooklijn_target changes
     if(prev_stooklijn_target != id(stooklijn_target)) prev_stooklijn_target = id(stooklijn_target);
+    //keep track of backup_heater state changes
+    if(prev_backup_heater_state != id(relay_backup_heat).state){
+      prev_backup_heater_state = id(relay_backup_heat).state;
+      backup_heat_change_time = run_time;
+    }
+
+
     return;

@@ -35,7 +35,7 @@
       if(id(thermostat_signal).state) return false; //thermostat still requesting heat
       //thermostat switched off
       //if not actually running, go straight to halt
-      if(!id(compressor_running).state) return true;
+      if(!id(compressor_running).state||state == SWW||state==DEFROST) return true;
       //Else check minimum run time has passed
       if((run_time - run_start_time) > (id(minimum_run_time).state * 60)) return true;
       return false;

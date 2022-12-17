@@ -18,6 +18,7 @@ esphome:
             id(relay_pump).turn_off();
             id(relay_heat).turn_off();
           }
+          id(controller_state).publish_state("Initialiseren");
           
 packages:
   config_values: !include config/config.yaml
@@ -340,13 +341,13 @@ sensor:
     name: "COP guess"
     id: cop_guess
     lambda: |-
-      if(id(current_flow_rate).state < 6 || (id(water_temp_retour).state-0.2) >= (id(water_temp_aanvoer).state+0.6)) return 0;
+      if(id(current_flow_rate).state < 6 || id(wp_delta_t).state <= 0) return 0;
       if(!id(compressor_running).state || id(wp_sensed_power).state < 300) return 0;
       if(id(wp_delta_t).state < 0) return 0;
       return ((id(current_flow_rate).state/60)*(id(wp_delta_t).state*4184))/id(wp_sensed_power).state;
     accuracy_decimals: 1
     unit_of_measurement: "COP"
-    update_interval: 120 sec
+    update_interval: 60 sec
     icon: mdi:approximately-equal
   - platform: template
     name: "Average cop"
