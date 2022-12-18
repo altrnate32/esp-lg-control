@@ -12,56 +12,361 @@ lambda: !lambda |-
     //WAIT: Compressor has stopped during run with still heating request (so algoritm failed)
     //SWW: HP operating to create hot water
     //DEFROST: HP operating defrost cycle
-    //HALT: shutdown (no more heat request)
     //AFTERRUN: Run done (no more heating request) external pump runs
     
-    //state machine
-    static States state = INIT;
-    static States prev_state = INIT;
-    static uint_fast32_t run_time = 0; //total esp boot time
-    static uint_fast32_t run_start_time = 0; //run_time value upon start of heat run
-    static uint_fast32_t state_change_time = 0; //run_time value upon previous state change
-    static uint_fast32_t compressor_time = 0; //run_time value on last compressor start
-    static uint_fast32_t target_change_time = 0; //run_time value on last pendel_target change
+    //main state machine object
+    static state_machine_class fsm; //state machine main object
     static uint_fast32_t dt = round(id(state_machine).get_update_interval()/1000); //update interval in seconds
-    static uint_fast32_t boost_start_time = 0; //time since boost started (boost is raising the stooklijn by 2 degrees for 1 hour to bring temperature back)
-    static uint_fast32_t backup_heat_change_time = 0; //time since last backup heat switch
+    fsm.increment_run_time(dt); //increment fsm run_time
+    
+    //do not run this until INIT is finished
+    if(fsm.state() != INIT){
+      //Receive inputs
+      fsm.receive_inputs();
+      //Translate Events
+      //Transition state
+      //Check fail safes
+      
+    }
 
-    //configurable
-    const static int hysteresis = 4; //Set controller control mode to 'outlet' and set hysteresis to the setting you have on the controller (recommend 4)
-    const static int max_overshoot = 3; //maximum allowable overshoot in 'OVERSHOOT' state
-    const float tracking_value = floor(id(water_temp_aanvoer).state); //Set to value that anti-pendel script will track (outlet/inlet) (recommend inlet)
-    const static int alive_timer = 120; //interval in seconds for an 'alive' message in the logs
-    const static float backup_heater_cop_limit = 1.8; //below which cop should the backup heater be switched on? Set to a large negative number (example -1000) to disable
+    //process state
+    //***************************************************************
+    //*******************State Machine States************************
+    //***************************************************************
+    switch (fsm.state()) {
+      case INIT: {
+        //DESCRIPTION: Early start. Wait for 1 minute to allow all sensor values to populate. Has 'instant on' mode to bypass some checks
+        //INTERPRETS INPUTS: THERMOSTAT_SENSOR (for instant on)
+        //RECEIVES EVENTS: none
+        //STATE TRANSITIONS: START; IDLE
+        //SPECIAL: reads raw values to determine if setup is complete
+        //wait for timeout
+        if(fsm.get_run_time() < 60 || isnan(id(buiten_temp).state) || isnan(id(water_temp_aanvoer).state) || isnan(id(water_temp_retour).state)) break;
+        //after timeout
+        id(derivative_value).publish_state(0);
+        id(average_cop_sensor).publish_state(0);
+        id(update_stooklijn) = true; //force update
+        fsm.receive_inputs();
+        //check for fast_start
+        if(fsm.input[THERMOSTAT]->state) {
+          fsm.state_transition(START);
+          id(controller_info).publish_state("Init complete. First state: START");
+        } else {
+          fsm.state_transition(IDLE);
+          id(controller_info).publish_state("Init complete. First state: IDLE");
+        }
+        ESP_LOGD(fsm.state_name().c_str(), "INIT Complete first state: %s",fsm.state_name(fsm.get_next_state()).c_str());
+        break;
+      }
+      case IDLE: {
+        //DESCRIPTION: Does nothing until thermostat has a signal (after input delay)
+        //INTERPRETS INPUTS: THERMOSTAT
+        //RECEIVES EVENTS: THERMOSTAT ON
+        //STATE TRANSITIONS: START;
+        //SPECIAL: none
+        if(fsm.input[THERMOSTAT]->state) {
+          fsm.state_transition(START);
+          ESP_LOGD(fsm.state_name().c_str(), "THERMOSTAT ON next state: START");
+        }
+        break;
+      }
+      case START: {
+        //set target, with minimum of tracking value+2 to ensure compressor start
+        if(oat < id(oat_silent_always_off).state) stooklijn_target_offset = -3;
+        else if(oat < id(oat_silent_always_on).state) stooklijn_target_offset = -1;
+        else if(oat > 15) stooklijn_target_offset = -3;
+        else stooklijn_target_offset = -2;
+        temp_new_target = id(stooklijn_target)+stooklijn_target_offset;
+        ESP_LOGD(fsm.state_name().c_str(), "Run start initial target set; stooklijn_target: %f pendel_target: %f inlet: %f outlet: %f",id(stooklijn_target),temp_new_target,id(water_temp_aanvoer).state,id(water_temp_retour).state);
+        run_start_time = run_time;
+        state = STARTING;
+        break;
+      }
+      case STARTING: {
+        if(id(compressor_running).state){
+          //we have ignition
+          state = STABILIZE;
+          compressor_time = run_time;
+        }
+        break;
+      }
+      case STABILIZE: {
+        //check how far we are in the run
+        if( (fsm.get_run_time() - fsm.get_run_start_time()) > (15*60) || ((fsm.get_run_time() - fsm.get_run_start_time()) > (6*60) && compressor_modulation)){
+          //monitor situation
+          //we are stable if derivative => -3 and <= 3 (1 degree in 20 minutes) or if compressor starts modulation (after 6 minutes)
+           if(compressor_modulation || ((derivative_D_10 * 60) >= -3 && (derivative_D_10 * 60) <= 3)){
+            //hand over to run algoritm, run will decide on overshoot/undershoot depending on where we stabilized
+            ESP_LOGD(fsm.state_name().c_str(),"Stabilized, RUN is next");
+            state = RUN;
+            break;
+          }
+        }
+        //else still early run
+        //update target if tracking_value or stooklijn_target changed. No advanced modulation as this is useless during early run
+        //limit number of updates to once every 5 minutes, unless run will be killed
+        if((run_time - target_change_time) > (5*60)){
+          if(delta > 0){
+            temp_new_target = max(id(stooklijn_target)+stooklijn_target_offset,(float)tracking_value-4);
+            temp_new_target = min(temp_new_target,id(stooklijn_target)+max_overshoot);
+          }
+        }
+        break;
+      }
+      case RUN: {
+        //check if we are running on the actual target
+        if(temp_new_target != id(stooklijn_target)){
+          //target changed, or stabilized on a different target
+          if(temp_new_target < id(stooklijn_target)) {
+            ESP_LOGD(fsm.state_name().c_str(),"Not running on stooklijn_target: new state will be stall");
+            state = STALL;
+            break;
+          } else {
+            ESP_LOGD(fsm.state_name().c_str(),"Not running on stooklijn_target: new state will be overshoot");
+            state = OVERSHOOT;
+            break;
+          }
+        }
 
-    //control algoritm
-    static std::vector<float> derivative; //vector of floats to integrate derivative (used in control logic)
-    static std::vector<float> cop_vector; //vector of floats to integrate cop
-    const float oat = round(id(buiten_temp).state); //outside air temperature
-    static float temp_new_target = id(stooklijn_target); //anti-pendel target
-    static float prev_stooklijn_target = id(stooklijn_target); //hold previous value of stooklijn target, to check for change
-    float delta = tracking_value-id(stooklijn_target); //Current Error value negative below target, positive above target
-    const float pendel_delta = tracking_value-temp_new_target; //Error value in regard to pendel target
-    static float derivative_D_5 = 0; //derivative based on past 5 minutes
-    static float derivative_D_10 = 0; //derivative based on past 10 minutes
-    float pred_20_delta_5 = 0; //predicted delta in 20 minutes based on last 5 minute derivative
-    float pred_20_delta_10 = 0; //predicted delta in 20 minutes based on last 10 minute derivative
-    float pred_5_delta_5 = 0; //predicted delta in 5 minutes based on last 5 minute derivative
-    static int stooklijn_target_offset = -3; //offset at start of run
-    static int boost_offset = 0; //keep track of offset during boost mode. Will be 0 if boost is not active
-    static bool boost = false; //is boost active or not
-    bool compressor_modulation = false; //is the compressor modulating
-    static float average_cop = 0; //keep track off average cop during last 15 minutes
-    static bool backup_heat_cop_limit_trigger = false; //if backup heat triggered due to low cop?
-    static bool prev_backup_heater_state = id(relay_backup_heat).state;
+        //when we are here, it means we where in a stable condition running on stooklijn_target
+        //check if overshooting predicted, or if operating > 2 degrees below target (stall)
+        //check predicted delta to reach in 20 minutes (pred_20_delta_5 and pred_20_delta_10)
+        //first check if emergency condition (should not be the case but...)
+        if(pendel_delta >= hysteresis){
+          state = OVERSHOOT;
+          break;
+        }
+        //then check if we have been in the current state for at least 5 minutes (to prevent over control)
+        if((run_time - state_change_time) < (5*60)) break;
+        //then check the predicted overshoot
+        if(delta >= 1 && (pred_20_delta_5 >= 2.5 || pred_20_delta_10 >= 2.5)){
+          //start overshooting algoritm to bring temperature back
+          ESP_LOGD(fsm.state_name().c_str(),"New state will be overshoot. target: %f stooklijn_target: %f delta: %f pred_20_delta_5: %f pred_20_delta_10: %f",temp_new_target,id(stooklijn_target),delta,pred_20_delta_5,pred_20_delta_10);
+          state = OVERSHOOT;
+          break;
+        } else if(delta <= -2 || (delta <= -1 && (pred_20_delta_5 < -3 || pred_20_delta_10 < -3))){
+          //stall, or stall predicted
+          ESP_LOGD(fsm.state_name().c_str(),"New state will be stall. target: %f stooklijn_target: %f delta: %f pred_20_delta_5: %f pred_20_delta_10: %f",temp_new_target,id(stooklijn_target),delta,pred_20_delta_5,pred_20_delta_10);
+          state = STALL;
+          break;
+        } //else status quo       
+        break;
+      }
+      case OVERSHOOT: {
+        //overshooting logic
+        //logic to contain overshoot and then return back to target
+        if(delta < 1 && pred_20_delta_5 < 1.5 && pred_20_delta_10 < 1.5 ){
+          //delta within range, are we done?
+          if(temp_new_target <= id(stooklijn_target)){
+            //overshoot contained operating below or at target
+            //hand back to RUN at target
+            temp_new_target = id(stooklijn_target);
+            ESP_LOGD(fsm.state_name().c_str(), "stooklijn_target <= pendel_target, delta < 2, no overshoot predicted, my job is done.");
+            state = RUN;
+            break;
+          }
+        }
+        if(pendel_delta >= hysteresis){
+          //emergency situation, run is about to be killed. Raise Target to prevent
+          temp_new_target = min(temp_new_target + 1,id(stooklijn_target) + max_overshoot);
+          ESP_LOGD(fsm.state_name().c_str(), "Emergency intervention, raised pendel_target (%f) (if there was room)",temp_new_target);
+          break;
+        }
+        if(temp_new_target > id(stooklijn_target)){
+          //target overshoot logic to return to target
+          //check if target can be lowered without killing the run
+          if(pendel_delta <= hysteresis-1){
+            //lower target, but not below id(stooklijn_target) next step may do that if needed
+            temp_new_target = max(id(stooklijn_target),temp_new_target - 1);
+            ESP_LOGD(fsm.state_name().c_str(), "Operating above stooklijn_target pendel_target (%f) could be lowered",temp_new_target);
+            break;
+          }
+        }
+        ESP_LOGD(fsm.state_name().c_str(), "waiting for (predicted)delta to come within rage delta: %f, pred_20_delta_5: %f, pred_20_delta_10: %f",delta,pred_20_delta_5,pred_20_delta_10);
+        break;
+      }
+      case STALL: {
+        //Stall! Stall! Stall, I have control
+        //Logic to raise target to return back to stooklijn_target (and hopefully prevent overshoot)
+        
+        //1: check if recovered
+        if(temp_new_target >= id(stooklijn_target) && delta >= 0 && pred_20_delta_5 >= 0 && pred_20_delta_10 >= 0){
+          //target is no longer below stooklijn_target. No longer a stall
+          //return to target and call run 
+          temp_new_target = id(stooklijn_target);
+          ESP_LOGD(fsm.state_name().c_str(), "delta > 0, stooklijn_target >= pendel_target, my job is done.");
+          state = RUN;
+          break;
+        }
+        //always give it at least 10 minutes
+        if((run_time - target_change_time) < (10*60)) {
+          ESP_LOGD(fsm.state_name().c_str(), "Stall is waiting for effect of previous target change");
+          break;
+        }
 
-    run_time += dt;
-    if(run_time % alive_timer == 0){
-      ESP_LOGD(state_string[state], "**alive** timer: %d oat: %f inlet: %f outlet: %f tracking_value: %f stooklijn: %f pendel: %f delta: %f pendel_delta: %f ",run_time,id(buiten_temp).state,id(water_temp_retour).state,id(water_temp_aanvoer).state,tracking_value,id(stooklijn_target),temp_new_target,delta,pendel_delta);
+        //2: check if operating below stooklijn_target and fix it
+        if(temp_new_target < id(stooklijn_target)){
+          //is it bad?
+          if((delta + (derivative_D_5*30)) < 0){
+            //it will not be fixed next 30 minutes, take a big step
+            //current target + 3 or tracking value, whichever is higher
+            temp_new_target = max(tracking_value,temp_new_target + 3); 
+          } else {
+            //current target + 1 or tracking value, whichever is higher
+            temp_new_target = max(tracking_value,temp_new_target  + 1);
+          }
+          //but not above stooklijn_target (yet)
+          temp_new_target = min(id(stooklijn_target),temp_new_target);
+          ESP_LOGD(fsm.state_name().c_str(), "Operating below target, raising target, pendel_target: %f",temp_new_target);
+          break;
+        }
+        //3: We are operating at target, are we modulating?
+        if(compressor_modulation && temp_new_target < id(stooklijn_target)+3){
+          //raise target above stooklijn target to stop modulation
+          temp_new_target = min(id(stooklijn_target)+3,tracking_value + 3);
+          ESP_LOGD(fsm.state_name().c_str(), "Modulating, raising target, pendel_target: %f",temp_new_target);
+          break;
+        }
+        //4 We are above target and with no modulation, so those tricks are gone. How bad is it?
+        if((delta + (derivative_D_5*30)) < 0){
+          //it will still not be fixed next 30 minutes
+          if(oat < id(backup_heater_active_temp).state && !id(relay_backup_heat).state){
+            id(relay_backup_heat).turn_on();
+            id(controller_info).publish_state("STALL backup heat on");
+            ESP_LOGD(fsm.state_name().c_str(), "tracking_value stalled, switched backup_heater on");
+          }
+          break;  
+        }
+        //Waiting for delta te become within range
+        ESP_LOGD(fsm.state_name().c_str(), "Stall is waiting for next action (or out of options).");
+        break;
+      }
+      case WAIT: {
+        //check if value changed
+        if(prev_stooklijn_target != id(stooklijn_target)) {
+          temp_new_target = id(stooklijn_target);
+          ESP_LOGD(fsm.state_name().c_str(),"Target changed: Setting new target: %f",temp_new_target);
+        }
+        
+        //wait at least 6 minutes before switching to run, even if compressor is running
+        if((run_time - state_change_time) < (6*60)) break;
+                
+        if(id(compressor_running).state){
+          state = RUN;
+          break;
+        }
+        break;
+      }
+      case SWW:
+        if(prev_state != SWW){
+          if(id(relay_backup_heat).state) id(controller_info).publish_state("Starting SWW with backup heat.");
+          else if(id(relay_backup_heat).state) id(controller_info).publish_state("Starting SWW with no backup heat.");
+        }
+        if(!id(sww_heating).state){
+          if(!thermostat_state){
+            //straight off if no thermostat signal after SWW
+            state = AFTERRUN;
+            break;
+          } else {
+            state = (id(compressor_running).state) ? RUN : WAIT;
+            //start boost if we were running without backup heat
+            if(!id(relay_backup_heat).state){
+              if(oat > id(backup_heater_active_temp).state) id(boost_switch).turn_on();
+              id(controller_info).publish_state("SWW done starting boost.");
+            }
+            temp_new_target = id(stooklijn_target);
+            break;
+          }
+        } 
+        break;
+      case DEFROST: {
+        //first run only
+        if(prev_state != DEFROST){
+          if(id(relay_backup_heat).state) id(controller_info).publish_state("DEFROST backup heat on.");
+          else id(controller_info).publish_state("DEFROST backup heat off.");
+        }
+        if(!id(defrosting).state){
+          //defrosting stopped initially start with stooklijn_target as target
+          if(temp_new_target != id(stooklijn_target)) temp_new_target = id(stooklijn_target);
+          //10 minute delay (defrost takes 4 minutes) some additional delay to allow values to stabilize and backup heater to run
+          if((run_time - state_change_time) < (10*60)) break;
+          if(!thermostat_state){
+            //straight off if no thermostat signal after defrost
+            state = AFTERRUN;
+            break;
+          }
+          if(id(compressor_running).state){
+            if(delta > 0){
+              if(id(relay_backup_heat).state) id(relay_backup_heat).turn_off();
+              state = RUN;
+            } else state = STALL;
+          } else state = WAIT;
+          if(id(relay_backup_heat).state) id(controller_info).publish_state("DEFROST done backup heat still on.");
+          else id(controller_info).publish_state("DEFROST done backup heat off.");
+        }
+        break;
+      }
+      case AFTERRUN: {
+        if((run_time - state_change_time) < (id(external_pump_runover).state*60)) break;
+        state = IDLE;
+        break;
+      }
+    }
+
+    if(fsm.run_time() % alive_timer == 0){
+      ESP_LOGD(fsm.state_name().c_str(), "**alive** timer: %d oat: %f inlet: %f outlet: %f tracking_value: %f stooklijn: %f pendel: %f delta: %f pendel_delta: %f ",fsm.run_time(),id(buiten_temp).state,id(water_temp_retour).state,id(water_temp_aanvoer).state,tracking_value,id(stooklijn_target),temp_new_target,delta,pendel_delta);
+    }
+    //***************************************************************
+    //*******************Control/Thermostat/Relay/Heat logic*********
+    //***************************************************************
+    
+    //check for SWW run
+    if(id(sww_heating).state && state != SWW){
+      ESP_LOGD(fsm.state_name().c_str(),"Detected SWW run");
+      state = SWW;
     }
     
+    //check for defrosting
+    if(id(defrosting).state && state != DEFROST){
+      ESP_LOGD(fsm.state_name().c_str(),"Detected defrosting");
+      state = DEFROST;
+    }
+    
+    
+    //switch off
+    if(state != INIT && state != IDLE && state != STABILIZE && state != SWW && state != DEFROST && state != AFTERRUN){
+      if(!thermostat_state){
+        ESP_LOGD(fsm.state_name().c_str(),"Detected valid switch off request");
+        state = AFTERRUN;
+      }
+    } else if(thermostat_state && state != INIT && state == IDLE || state == AFTERRUN){
+      state = START;
+    }
+
+    if(id(relay_heat).state){
+      if(state == IDLE || state == AFTERRUN){
+        id(relay_heat).turn_off();
+        ESP_LOGD(fsm.state_name().c_str(),"Relay heat off due to incompatible state");
+        id(controller_info).publish_state("Switching heat off due to incompatible state");
+      } else if(!thermostat_state && state == SWW || state == DEFROST){
+        id(relay_heat).turn_off();
+        ESP_LOGD(fsm.state_name().c_str(),"Relay heat off due to thermostat switchoff during defrost/SWW");
+        id(controller_info).publish_state("Switching heat off due to thermostat");
+      }
+    } else if(state == START || state == STARTING) {
+      id(relay_heat).turn_on();
+    } else if(thermostat_state && state == SWW || state == DEFROST){
+      id(relay_heat).turn_on();
+    }
+    
+    //check for a failed run (waiting)
+    if(!id(compressor_running).state && id(relay_heat).state && (state == STABILIZE || state == RUN || state == OVERSHOOT || state == STALL)){
+      ESP_LOGD(fsm.state_name().c_str(),"Failed run detected");
+      state = WAIT;
+    }
+
     //***************************************************************
-    //***************Silent mode / backup heater logic***************
+    //*******************Silent mode logic***************************
     //***************************************************************
     //if oat >= silent always on: silent on
     //if oat <= silent always off: silent off
@@ -69,14 +374,14 @@ lambda: !lambda |-
 
     if(oat >= id(oat_silent_always_on).state) {
       if(!id(silent_mode).state){
-        ESP_LOGD(state_string[state],"oat > oat_silent_always_off and silent mode off, switching silent mode on");
+        ESP_LOGD(fsm.state_name().c_str(),"oat > oat_silent_always_off and silent mode off, switching silent mode on");
         id(silent_mode_switch).turn_on();
         id(silent_mode).publish_state(true);
         id(controller_info).publish_state("Switching Silent mode on oat > on");
       }
     } else if(oat <= id(oat_silent_always_off).state){
       if(id(silent_mode).state){
-        ESP_LOGD(state_string[state],"Oat < oat_silent_always_on Switching silent mode off");
+        ESP_LOGD(fsm.state_name().c_str(),"Oat < oat_silent_always_on Switching silent mode off");
         id(controller_info).publish_state("Switching silent mode off oat < oat_silent_always_off");
         id(silent_mode_switch).turn_off();
         id(silent_mode).publish_state(false);
@@ -84,13 +389,13 @@ lambda: !lambda |-
     } else {
       if(boost || state == STALL){
         if(id(silent_mode).state){
-          ESP_LOGD(state_string[state],"Boost or stall silent mode off");
+          ESP_LOGD(fsm.state_name().c_str(),"Boost or stall silent mode off");
           id(controller_info).publish_state("STALL/Boost switching silent mode off");
           id(silent_mode_switch).turn_off();
           id(silent_mode).publish_state(false);
         }
       } else {
-        ESP_LOGD(state_string[state],"oat between silent mode brackers. No boost/stall switching silent off");
+        ESP_LOGD(fsm.state_name().c_str(),"oat between silent mode brackers. No boost/stall switching silent off");
         id(controller_info).publish_state("Switching silent mode off oat in between");
         id(silent_mode_switch).turn_off();
         id(silent_mode).publish_state(false);
@@ -100,27 +405,31 @@ lambda: !lambda |-
     else if(!id(silent_mode).state && id(compressor_rpm).state <= 70) compressor_modulation = true;
     else compressor_modulation = false;
 
-    //************************Backup Heater*************************
+    //***************************************************************
+    //*******************Backup Heater logic*************************
+    //***************************************************************
 
-    //Switch always off in these cases
+    //Switch off in these cases
     if(id(relay_backup_heat).state){
-      if(state == INIT || state == IDLE || state == OVERSHOOT || state == HALT || state == AFTERRUN){
+      if(state == INIT || state == IDLE || state == START || state == STARTING || state == OVERSHOOT || state == AFTERRUN){
+        //incompatible state
         id(relay_backup_heat).turn_off();
-        ESP_LOGD(state_string[state],"Backup heat off due to incompatible state");
+        ESP_LOGD(fsm.state_name().c_str(),"Backup heat off due to incompatible state");
         id(controller_info).publish_state("Backup heat off due to state change");
       } else if(oat > id(backup_heater_active_temp).state){
+        //temperature above limit
         id(relay_backup_heat).turn_off();
-        ESP_LOGD(state_string[state],"Backup heat off oat > backup_heater_active_temp");
+        ESP_LOGD(fsm.state_name().c_str(),"Backup heat off oat > backup_heater_active_temp");
         id(controller_info).publish_state("Backup heat off due to high oat");
       } else if(!id(relay_heat).state){
         //no heat request, why is backup heat on? (probably due to SWW?
         id(relay_backup_heat).turn_off();
-        ESP_LOGD(state_string[state],"Backup heat off no heat request (relay_heat off)");
+        ESP_LOGD(fsm.state_name().c_str(),"Backup heat off no heat request (relay_heat off)");
         id(controller_info).publish_state("Backup heat off due to no heat request");
       } else if(backup_heat_cop_limit_trigger && average_cop > 0.0 && average_cop > (backup_heater_cop_limit+0.2) ){
         //if triggered due to low cop and situation improved (with some hysteresis)
         id(relay_backup_heat).turn_off();
-        ESP_LOGD(state_string[state],"Backup heat off no cop improved");
+        ESP_LOGD(fsm.state_name().c_str(),"Backup heat off no cop improved");
         id(controller_info).publish_state("Backup heat off due to cop improvement");
         backup_heat_cop_limit_trigger = false;
       }
@@ -135,33 +444,38 @@ lambda: !lambda |-
           id(controller_info).publish_state("Backup heat on due to low COP");
         }
       }
-    }
-    //make sure external pump is running when backup heat is on
-    if(id(relay_backup_heat).state && !id(relay_pump).state){
-      id(relay_pump).turn_on();
-      ESP_LOGD(state_string[state],"Exernal pump switch on because backup heat is on");
-      id(controller_info).publish_state("External pump on due to backup heat on.");
+      //when first entering SWW mode or when thermostat switched on during SWW run
+      if(state == SWW && (prev_state != SWW || (thermostat_state && prev_thermostat_state != thermostat_state))){
+        if(oat <= id(backup_heater_active_temp).state && thermostat_state) id(relay_backup_heat).turn_on();
+      }
+      //when first entering defrost
+      if(state == DEFROST && (prev_state != DEFROST || (thermostat_state && prev_thermostat_state != thermostat_state))){
+        if(oat <= id(backup_heater_active_temp).state && thermostat_state) id(relay_backup_heat).turn_on();
+      }
     }
     //backup heater will be turned on and off by SWW, DEFROST and sometimes STALL
 
     //***************************************************************
-    //************************ handle events ************************
+    //*******************External Pump logic*************************
     //***************************************************************
-    //update stooklijn
-    if(id(update_stooklijn)) {
-      calculate_stooklijn(boost_offset);
-      id(watertemp_target).publish_state(id(stooklijn_target));
-    }
-    
-    //switch off check
-    if(state != INIT && state != IDLE && state != STABILIZE && state != HALT && state != AFTERRUN){
-      if(check_switch_off(state, run_time, run_start_time)){
-        ESP_LOGD(state_string[state],"Detected valid switch off request");
-        if(state != SWW && state != DEFROST) state = HALT;
-        else id(relay_heat).turn_off();
+    //make sure external pump is running when backup heat and/or relay_heat is on
+    //and during afterrun
+    if(id(relay_backup_heat).state||id(relay_heat).state||state == AFTERRUN){
+      if(!id(relay_pump).state){
+        id(relay_pump).turn_on();
+        ESP_LOGD(fsm.state_name().c_str(),"Exernal pump switched on.");
+        id(controller_info).publish_state("External pump on.");
       }
+    } else if(id(relay_pump).state){
+      id(relay_pump).turn_off();
+      ESP_LOGD(fsm.state_name().c_str(),"Exernal pump switched off.");
+       id(controller_info).publish_state("External pump off.");
     }
-
+   
+    //***************************************************************
+    //*******************Handle other Events*************************
+    //***************************************************************
+        
     //if internal pump running calculate derivative (if pump is not running, this value does not make sense).
     if(id(pump_running).state && state != SWW && state != DEFROST){
       //calculate derivative
@@ -198,24 +512,6 @@ lambda: !lambda |-
     pred_20_delta_5 = (tracking_value + (derivative_D_5*20)) - id(stooklijn_target);
     pred_20_delta_10 = (tracking_value + (derivative_D_10*20)) - id(stooklijn_target);
     pred_5_delta_5 = (tracking_value + (derivative_D_5*5))- id(stooklijn_target);
-
-    //check for a failed run (waiting)
-    if(!id(compressor_running).state && id(relay_heat).state && (state == STABILIZE || state == RUN || state == OVERSHOOT || state == STALL)){
-      ESP_LOGD(state_string[state],"Failed run detected");
-      state = WAIT;
-    }
-
-    //check for SWW run
-    if(id(sww_heating).state && state != SWW){
-      ESP_LOGD(state_string[state],"Detected SWW run");
-      state = SWW;
-    }
-    
-    //check for defrosting
-    if(id(defrosting).state && state != DEFROST){
-      ESP_LOGD(state_string[state],"Detected defrosting");
-      state = DEFROST;
-    }
 
     //check boost (raising the stooklijn with 2 degrees for xx minutes)
     if(id(boost_switch).state){
@@ -254,327 +550,14 @@ lambda: !lambda |-
    
     if(id(stooklijn_target) != prev_stooklijn_target){
       //value changed, recalculate delta;
-      ESP_LOGD(state_string[state],"Stooklijn target changed, recalculating delta.");
+      ESP_LOGD(fsm.state_name().c_str(),"Stooklijn target changed, recalculating delta.");
       delta = tracking_value-id(stooklijn_target);
     }
+    
+
     //***************************************************************
+    //*******************Post Run Cleanup****************************
     //***************************************************************
-
-    switch (state) {
-      case INIT: {
-        //early start. Be patient until everything is set up
-        if(run_time > 60 && !isnan(id(buiten_temp).state) && !isnan(id(water_temp_aanvoer).state) && !isnan(id(water_temp_retour).state) && !isnan(tracking_value)){
-          id(derivative_value).publish_state(0);
-          id(average_cop_sensor).publish_state(0);
-          calculate_stooklijn(boost_offset);
-          if(id(thermostat_signal).state) {
-            state = START;
-            id(controller_info).publish_state("Init complete. First state: START");
-          } else {
-            id(relay_heat).turn_off();
-            id(relay_pump).turn_off();
-            state = IDLE;
-            id(controller_info).publish_state("Init complete. First state: IDLE");
-          }
-          id(update_stooklijn) = true;
-        }
-        break;
-      }
-      case IDLE: {
-        if(id(thermostat_signal).state){
-          state = START;
-        } else {
-          if(id(relay_heat).state) id(relay_heat).turn_off();
-          if(id(relay_pump).state) id(relay_pump).turn_off();
-        }
-        break;
-      }
-      case START: {
-        //wait for thermostat_on delay
-        if((run_time - state_change_time) < (id(thermostat_on_delay).state*60)) break;
-        //after delay:
-        if(!id(thermostat_signal).state){
-          //thermostat switched off during on delay timer
-          state = IDLE;
-          id(controller_info).publish_state("Thermostat switched off during on delay timer.");
-          break;
-        }
-        //switch on external pump
-        id(relay_pump).turn_on();
-        //set target, with minimum of tracking value+2 to ensure compressor start
-        if(oat < id(oat_silent_always_off).state) stooklijn_target_offset = -3;
-        else if(oat < id(oat_silent_always_on).state) stooklijn_target_offset = -1;
-        else if(oat > 15) stooklijn_target_offset = -3;
-        else stooklijn_target_offset = -2;
-        temp_new_target = id(stooklijn_target)+stooklijn_target_offset;
-        ESP_LOGD(state_string[state], "Run start initial target set; stooklijn_target: %f pendel_target: %f inlet: %f outlet: %f",id(stooklijn_target),temp_new_target,id(water_temp_aanvoer).state,id(water_temp_retour).state);
-        run_start_time = run_time;
-        //switch on heatpump external thermostat contact
-        id(relay_heat).turn_on();
-        state = STARTING;
-        break;
-      }
-      case STARTING: {
-        if(id(compressor_running).state){
-          //we have ignition
-          state = STABILIZE;
-          compressor_time = run_time;
-        }
-        break;
-      }
-      case STABILIZE: {
-        //check how far we are in the run
-        if( (run_time - run_start_time) > (15*60) || ((run_time - run_start_time) > (6*60) && compressor_modulation)){
-          //monitor situation
-          //we are stable if derivative => -3 and <= 3 (1 degree in 20 minutes) or if compressor starts modulation (after 6 minutes)
-           if(compressor_modulation || ((derivative_D_10 * 60) >= -3 && (derivative_D_10 * 60) <= 3)){
-            //hand over to run algoritm, run will decide on overshoot/undershoot depending on where we stabilized
-            ESP_LOGD(state_string[state],"Stabilized, RUN is next");
-            state = RUN;
-            break;
-          }
-        }
-        //else still early run
-        //update target if tracking_value or stooklijn_target changed. No advanced modulation as this is useless during early run
-        //limit number of updates to once every 5 minutes, unless run will be killed
-        if((run_time - target_change_time) > (5*60)){
-          if(delta > 0){
-            temp_new_target = max(id(stooklijn_target)+stooklijn_target_offset,(float)tracking_value-4);
-            temp_new_target = min(temp_new_target,id(stooklijn_target)+max_overshoot);
-          }
-        }
-        break;
-      }
-      case RUN: {
-        //check if we are running on the actual target
-        if(temp_new_target != id(stooklijn_target)){
-          //target changed, or stabilized on a different target
-          if(temp_new_target < id(stooklijn_target)) {
-            ESP_LOGD(state_string[state],"Not running on stooklijn_target: new state will be stall");
-            state = STALL;
-            break;
-          } else {
-            ESP_LOGD(state_string[state],"Not running on stooklijn_target: new state will be overshoot");
-            state = OVERSHOOT;
-            break;
-          }
-        }
-
-        //when we are here, it means we where in a stable condition running on stooklijn_target
-        //check if overshooting predicted, or if operating > 2 degrees below target (stall)
-        //check predicted delta to reach in 20 minutes (pred_20_delta_5 and pred_20_delta_10)
-        //first check if emergency condition (should not be the case but...)
-        if(pendel_delta >= hysteresis){
-          state = OVERSHOOT;
-          break;
-        }
-        //then check if we have been in the current state for at least 5 minutes (to prevent over control)
-        if((run_time - state_change_time) < (5*60)) break;
-        //then check the predicted overshoot
-        if(delta >= 1 && (pred_20_delta_5 >= 2.5 || pred_20_delta_10 >= 2.5)){
-          //start overshooting algoritm to bring temperature back
-          ESP_LOGD(state_string[state],"New state will be overshoot. target: %f stooklijn_target: %f delta: %f pred_20_delta_5: %f pred_20_delta_10: %f",temp_new_target,id(stooklijn_target),delta,pred_20_delta_5,pred_20_delta_10);
-          state = OVERSHOOT;
-          break;
-        } else if(delta <= -2 || (delta <= -1 && (pred_20_delta_5 < -3 || pred_20_delta_10 < -3))){
-          //stall, or stall predicted
-          ESP_LOGD(state_string[state],"New state will be stall. target: %f stooklijn_target: %f delta: %f pred_20_delta_5: %f pred_20_delta_10: %f",temp_new_target,id(stooklijn_target),delta,pred_20_delta_5,pred_20_delta_10);
-          state = STALL;
-          break;
-        } //else status quo       
-        break;
-      }
-      case OVERSHOOT: {
-        //overshooting logic
-        //logic to contain overshoot and then return back to target
-        if(delta < 1 && pred_20_delta_5 < 1.5 && pred_20_delta_10 < 1.5 ){
-          //delta within range, are we done?
-          if(temp_new_target <= id(stooklijn_target)){
-            //overshoot contained operating below or at target
-            //hand back to RUN at target
-            temp_new_target = id(stooklijn_target);
-            ESP_LOGD(state_string[state], "stooklijn_target <= pendel_target, delta < 2, no overshoot predicted, my job is done.");
-            state = RUN;
-            break;
-          }
-        }
-        if(pendel_delta >= hysteresis){
-          //emergency situation, run is about to be killed. Raise Target to prevent
-          temp_new_target = min(temp_new_target + 1,id(stooklijn_target) + max_overshoot);
-          ESP_LOGD(state_string[state], "Emergency intervention, raised pendel_target (%f) (if there was room)",temp_new_target);
-          break;
-        }
-        if(temp_new_target > id(stooklijn_target)){
-          //target overshoot logic to return to target
-          //check if target can be lowered without killing the run
-          if(pendel_delta <= hysteresis-1){
-            //lower target, but not below id(stooklijn_target) next step may do that if needed
-            temp_new_target = max(id(stooklijn_target),temp_new_target - 1);
-            ESP_LOGD(state_string[state], "Operating above stooklijn_target pendel_target (%f) could be lowered",temp_new_target);
-            break;
-          }
-        }
-        ESP_LOGD(state_string[state], "waiting for (predicted)delta to come within rage delta: %f, pred_20_delta_5: %f, pred_20_delta_10: %f",delta,pred_20_delta_5,pred_20_delta_10);
-        break;
-      }
-      case STALL: {
-        //Stall! Stall! Stall, I have control
-        //Logic to raise target to return back to stooklijn_target (and hopefully prevent overshoot)
-        
-        //1: check if recovered
-        if(temp_new_target >= id(stooklijn_target) && delta >= 0 && pred_20_delta_5 >= 0 && pred_20_delta_10 >= 0){
-          //target is no longer below stooklijn_target. No longer a stall
-          //return to target and call run 
-          temp_new_target = id(stooklijn_target);
-          ESP_LOGD(state_string[state], "delta > 0, stooklijn_target >= pendel_target, my job is done.");
-          state = RUN;
-          break;
-        }
-        //always give it at least 10 minutes
-        if((run_time - target_change_time) < (10*60)) {
-          ESP_LOGD(state_string[state], "Stall is waiting for effect of previous target change");
-          break;
-        }
-
-        //2: check if operating below stooklijn_target and fix it
-        if(temp_new_target < id(stooklijn_target)){
-          //is it bad?
-          if((delta + (derivative_D_5*30)) < 0){
-            //it will not be fixed next 30 minutes, take a big step
-            //current target + 3 or tracking value, whichever is higher
-            temp_new_target = max(tracking_value,temp_new_target + 3); 
-          } else {
-            //current target + 1 or tracking value, whichever is higher
-            temp_new_target = max(tracking_value,temp_new_target  + 1);
-          }
-          //but not above stooklijn_target (yet)
-          temp_new_target = min(id(stooklijn_target),temp_new_target);
-          ESP_LOGD(state_string[state], "Operating below target, raising target, pendel_target: %f",temp_new_target);
-          break;
-        }
-        //3: We are operating at target, are we modulating?
-        if(compressor_modulation && temp_new_target < id(stooklijn_target)+3){
-          //raise target above stooklijn target to stop modulation
-          temp_new_target = min(id(stooklijn_target)+3,tracking_value + 3);
-          ESP_LOGD(state_string[state], "Modulating, raising target, pendel_target: %f",temp_new_target);
-          break;
-        }
-        //4 We are above target and with no modulation, so those tricks are gone. How bad is it?
-        if((delta + (derivative_D_5*30)) < 0){
-          //it will still not be fixed next 30 minutes
-          if(oat < id(backup_heater_active_temp).state && !id(relay_backup_heat).state){
-            id(relay_backup_heat).turn_on();
-            id(controller_info).publish_state("STALL backup heat on");
-            ESP_LOGD(state_string[state], "tracking_value stalled, switched backup_heater on");
-          }
-          break;  
-        }
-        //Waiting for delta te become within range
-        ESP_LOGD(state_string[state], "Stall is waiting for next action (or out of options).");
-        break;
-      }
-      case WAIT: {
-        //check if value changed
-        if(prev_stooklijn_target != id(stooklijn_target)) {
-          temp_new_target = id(stooklijn_target);
-          ESP_LOGD(state_string[state],"Target changed: Setting new target: %f",temp_new_target);
-        }
-        
-        //wait at least 6 minutes before switching to run, even if compressor is running
-        if((run_time - state_change_time) < (6*60)) break;
-                
-        if(id(compressor_running).state){
-          state = RUN;
-          break;
-        }
-        break;
-      }
-      case SWW:
-        //only when first entering SWW mode
-        if(prev_state != SWW){
-          if(oat <= id(backup_heater_active_temp).state && id(relay_heat).state){
-            if(!id(relay_backup_heat).state){
-              id(relay_backup_heat).turn_on();
-            }
-            id(controller_info).publish_state("SWW with backup heat on.");
-          } else {
-            id(controller_info).publish_state("SWW with backup heat off.");
-          }
-        }
-        if(!id(sww_heating).state){
-          if(!id(thermostat_signal).state){
-            //straight off if no thermostat signal after SWW
-            state = AFTERRUN;
-            id(relay_heat).turn_off();
-            id(relay_backup_heat).turn_off();
-            break;
-          } else {
-            state = (id(compressor_running).state) ? RUN : WAIT;
-            //start boost if we were running without backup heat
-            if(!id(relay_backup_heat).state){
-              if(oat > id(backup_heater_active_temp).state) id(boost_switch).turn_on();
-              id(controller_info).publish_state("SWW done starting boost.");
-            }
-            temp_new_target = id(stooklijn_target);
-            break;
-          }
-        } 
-        break;
-      case DEFROST: {
-        //first run only
-        if(prev_state != DEFROST){
-          if(oat <= id(backup_heater_active_temp).state && !id(relay_backup_heat).state) {
-            id(relay_backup_heat).turn_on();
-            id(controller_info).publish_state("DEFROST backup heat on.");
-          }
-        }
-        if(!id(defrosting).state){
-          //defrosting stopped initially start with stooklijn_target as target
-          if(temp_new_target != id(stooklijn_target)) temp_new_target = id(stooklijn_target);
-          //10 minute delay (defrost takes 4 minutes) some additional delay to allow values to stabilize and backup heater to run
-          if((run_time - state_change_time) < (10*60)) break;
-          if(!id(thermostat_signal).state){
-            //straight off if no thermostat signal after SWW
-            state = AFTERRUN;
-            id(relay_heat).turn_off();
-            id(relay_backup_heat).turn_off();
-            break;
-          }
-          if(id(compressor_running).state){
-            if(delta > 0){
-              id(relay_backup_heat).turn_off();
-              state = RUN;
-            } else state = STALL;
-          } else state = WAIT;
-          if(id(relay_backup_heat).state) id(controller_info).publish_state("DEFROST done backup heat still on.");
-          else id(controller_info).publish_state("DEFROST done backup heat off.");
-        }
-        break;
-      }
-      case HALT: {
-        //wait for thermostat_off delay
-        if((run_time - state_change_time) < (id(thermostat_off_delay).state*60)) break;
-        //after delay:
-        if(id(thermostat_signal).state){
-          //thermostat reset, so continue operation
-          state = RUN;
-          break;
-        }
-        //thermostat not switched on again, so halt session
-        id(relay_heat).turn_off();
-        state = AFTERRUN;
-        break;
-      }
-      case AFTERRUN: {
-        if((run_time - state_change_time) < (id(external_pump_runover).state*60)) break;
-        id(relay_pump).turn_off();
-        //just to make sure
-        id(relay_backup_heat).turn_off();
-        state = IDLE;
-        break;
-      }
-    }
-
     //Update modbus target if temp_new_target has changed    
     if((float)temp_new_target != (float)id(doel_temp).state && state != INIT){
       //prevent update while still in INIT
@@ -583,12 +566,13 @@ lambda: !lambda |-
       id(doel_temp).publish_state(temp_new_target*10);
       target_change_time = run_time;
     }
-    //Keep track of state updates
+
+    //Keep track of state changes
     if(state != prev_state){
-      id(controller_state).publish_state(state_string_friendly[state]);
+      id(controller_state).publish_state(fsm.state_name());
       state_change_time = run_time;
       prev_state = state;
-      ESP_LOGD(state_string[state],"State change: %s",state_string[state]);
+      ESP_LOGD(fsm.state_name().c_str(),"State change: %s",fsm.state_name().c_str());
     }
 
     //keep track of stooklijn_target changes
@@ -599,5 +583,7 @@ lambda: !lambda |-
       backup_heat_change_time = run_time;
     }
 
+    //NOW unflag all input values to be able to track changes on next run
+    fsm.unflag_input_values();
 
     return;
