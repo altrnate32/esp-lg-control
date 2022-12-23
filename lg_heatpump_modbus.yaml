@@ -71,7 +71,7 @@ binary_sensor:
   - platform: modbus_controller
     modbus_controller_id: lg
     name: "Silent Mode"
-    id: silent_mode
+    id: silent_mode_state
     register_type: discrete_input
     skip_updates: 1
     address: 7

@@ -38,10 +38,6 @@ logger:
     number: WARN
 
 globals:
-  - id: stooklijn_target
-    type: float
-    restore_value: yes
-    initial_value: '30'
   - id: update_stooklijn
     type: bool
     restore_value: no
