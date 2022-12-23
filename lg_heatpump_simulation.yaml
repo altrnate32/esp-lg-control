@@ -1,0 +1,112 @@
+#This file replaces lg_heatpump_modbus.yaml
+#All modbus sensors are replaced by dummy switches or inputs to be able to manually simulate heatpump responses
+#This allows testing of new firmwares on a separate esp 
+
+switch:
+  - platform: template
+    name: "Silent Mode Switch"
+    id: silent_mode_switch
+    icon: mdi:volume-off
+    optimistic: true
+  - platform: template
+    name: "SWW On/Off Switch"
+    id: sww_on_off
+    icon: mdi:shower-head
+    optimistic: true
+  - platform: template
+    name: "Pump Running sensor"
+    id: pump_running
+    optimistic: true
+  - platform: template
+    name: "Compressor Running sensor"
+    id: compressor_running
+    icon: mdi:car-turbocharger
+    optimistic: true
+  - platform: template
+    name: "Defrosting sensor"
+    id: defrosting
+    optimistic: true
+  - platform: template
+    name: "SWW Heating sensor"
+    id: sww_heating
+    icon: mdi:shower-head
+    optimistic: true
+  - platform: template
+    name: "Silent Mode state sensor"
+    id: silent_mode_state
+    icon: mdi:volume-off
+    optimistic: true
+
+sensor:
+  - platform: template
+    name: "Doeltemperatuur"
+    id: doel_temp
+    unit_of_measurement: "°C"
+    icon: mdi:home-thermometer-outline
+
+number:
+  - platform: template
+    id: water_temp_target_output
+    step: 1
+    min_value: 20
+    max_value: 50
+    initial_value: 20
+    optimistic: true
+  - platform: template
+    name: "Water retour"
+    id: water_temp_retour
+    min_value: 20
+    max_value: 50
+    initial_value: 20
+    step: 1
+    unit_of_measurement: "°C"
+    icon: mdi:thermometer-chevron-down
+    optimistic: true
+  - platform: template
+    name: "Water aanvoer"
+    id: water_temp_aanvoer
+    min_value: 20
+    max_value: 50
+    initial_value: 20
+    step: 1
+    unit_of_measurement: "°C"
+    icon: mdi:thermometer-chevron-up
+    optimistic: true
+  - platform: template
+    name: "Buitentemperatuur"
+    id: buiten_temp
+    min_value: -10
+    max_value: 25
+    initial_value: 20
+    step: 1
+    unit_of_measurement: "°C"
+    optimistic: true
+    icon: mdi:weather-cloudy
+    on_value:
+      then:
+        - lambda: !lambda |-
+            static float prev_oat = -100.0;
+            if (abs(round(x) - round(prev_oat)) > 0.1) {
+              id(update_stooklijn) = true;
+              prev_oat = x;
+            }
+  - platform: template
+    name: "WP Sensed Power"
+    id: wp_sensed_power
+    min_value: 100
+    max_value: 4000
+    initial_value: 100
+    step: 500
+    unit_of_measurement: "W"
+    icon: mdi:meter-electric-outline
+    optimistic: true
+  - platform: template
+    name: "Compressor RPM"
+    id: compressor_rpm
+    min_value: 0
+    max_value: 100
+    initial_value: 0
+    step: 1
+    unit_of_measurement: "RPM"
+    icon: mdi:car-turbocharger
+    optimistic: true
