@@ -109,7 +109,7 @@
             ESP_LOGD(state_name(), "State transition-> %s",state_name(get_next_state()));
         }
         void handle_state_transition(){
-          if(next_state != current_state){
+          if(get_next_state() != state() && get_next_state() != NONE){
             prev_state = current_state;
             current_state = get_next_state();
             state_start_time = get_run_time();
@@ -120,12 +120,12 @@
         }
         const char * state_friendly_name(states stt = NONE){
           if(stt == NONE) stt = current_state;
-          static const std::string state_string_friendly_list[13] = {"Null","Initialiseren","Uit","Start","Opstarten","Aan (stabiliseren)","Aan (verwarmen)","Aan (overshoot)","Aan (stall)","Pauze (Uit)","Aan (Warm Water)","Ontdooien","Nadraaien"}; 
+          static const std::string state_string_friendly_list[13] = {"None","Initialiseren","Uit","Start","Opstarten","Aan (stabiliseren)","Aan (verwarmen)","Aan (overshoot)","Aan (stall)","Pauze (Uit)","Aan (Warm Water)","Ontdooien","Nadraaien"}; 
           return state_string_friendly_list[stt].c_str();
         }
         const char * state_name(states stt = NONE){
           if(stt == NONE) stt = current_state;
-          static const std::string state_string_list[13] = {"NULL","INIT","IDLE","START","STARTING","STABILIZE","RUN","OVERSHOOT","STALL","WAIT","SWW","DEFROST","AFTERRUN"};
+          static const std::string state_string_list[13] = {"NONE","INIT","IDLE","START","STARTING","STABILIZE","RUN","OVERSHOOT","STALL","WAIT","SWW","DEFROST","AFTERRUN"};
           return state_string_list[stt].c_str();
         }
         uint_fast32_t get_run_time(){

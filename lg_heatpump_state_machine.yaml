@@ -26,9 +26,7 @@ lambda: !lambda |-
     if(fsm.state() != INIT){
       //Receive all inputs
       fsm.receive_inputs();
-      fsm.process_inputs();
-      //Complete state transition that was initiated in previous run
-      fsm.handle_state_transition();
+      fsm.process_inputs();      
     }
 
     
@@ -476,6 +474,10 @@ lambda: !lambda |-
         fsm.state_transition(IDLE);
         break;
       }
+      case NONE:{
+        ESP_LOGE(fsm.state_name(), "ERROR: State is none");
+        id(controller_info).publish_state("ERROR: state = NONE");
+      }
     }
 
     if(fsm.get_run_time() % fsm.alive_timer == 0){
@@ -494,5 +496,7 @@ lambda: !lambda |-
 
     //Now unflag all input values to be able to track changes on next run
     fsm.unflag_input_values();
+    //Complete state transition that was initiated
+    fsm.handle_state_transition();
 
     return;

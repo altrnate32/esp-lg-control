@@ -1,5 +1,5 @@
 substitutions:
-  device_name: esp-wp-control
+  device_name: esp-lg-simulator
 
 esphome:
   name: "${device_name}"
@@ -21,20 +21,15 @@ esphome:
           id(controller_state).publish_state("Initialiseren");
           
 packages:
-  config_values: !include config/config.yaml
-  lg_modbus: !include lg_heatpump_modbus.yaml #include file with modbus sensors
-  lg_dallas_temp: !include lg_dallas_temp.yaml #optional file with dallas temp probes (disable if not used)
-
+  config_values: !include config/config_simulator.yaml
+  lg_modbus: !include lg_heatpump_simulation.yaml #include file with simulated modbus sensors
+  
 # Enable logging. Disable modbus controller debug messages
 logger:
   logs:
-    modbus_controller.sensor: WARN
-    modbus_controller.output: WARN
-    modbus.number: WARN
     esp32.preferences: WARN
     sensor: WARN
     text_sensor: WARN
-    dallas.sensor: WARN #disable if dallas is not used
     number: WARN
 
 globals:
@@ -211,49 +206,23 @@ number:
     icon: mdi:gas-burner
 
 switch:
-#  - platform: template
-#    name: "Termostat On"
-#    id: thermostat_signal
-#    optimistic: true
-  - platform: gpio
-    name: "WP External Pump"
-    pin: 18
-    id: relay_pump
-    restore_mode: RESTORE_DEFAULT_OFF
-    inverted: true
-    icon: mdi:pump
-#  - platform: template
-#    name: "Dummy external pump relay"
-#    id: "relay_pump"
-#    optimistic: true
-  - platform: gpio
-    name: "WP Heat"
-    pin: 19
-    id: relay_heat
-    restore_mode: RESTORE_DEFAULT_OFF
-    inverted: true
-    icon: mdi:power
-#  - platform: template
-#    name: "Dummy heat relay"
-#    id: "relay_heat"
-#    optimistic: true
-  - platform: gpio
-    name: "WP Backup Heater"
-    pin: 21
-    id: relay_backup_heat
-    restore_mode: ALWAYS_OFF
-    inverted: true
+  - platform: template
+    name: "Termostat On"
+    id: thermostat_signal
+    optimistic: true
+  - platform: template
+    name: "Dummy external pump relay"
+    id: "relay_pump"
+    optimistic: true
+  - platform: template
+    name: "Dummy heat relay"
+    id: "relay_heat"
+    optimistic: true
+  - platform: template
+    name: "Dummy backup_heat relay"
+    id: "relay_backup_heat"
+    optimistic: true
     icon: mdi:gas-burner
-#  - platform: template
-#    name: "Dummy backup_heat relay"
-#    id: "relay_backup_heat"
-#    optimistic: true
-  - platform: gpio
-    name: "Relay 4"
-    pin: 22
-    id: relay_4
-    restore_mode: ALWAYS_OFF
-    inverted: true
   - platform: restart
     name: "ESP WP Control Restart"
   - platform: template
@@ -277,17 +246,6 @@ interval:
     then: !include { file: lg_heatpump_state_machine.yaml }
 
 binary_sensor:
-  - platform: gpio # Thermostat input signal is connected to this input pin
-    pin:
-      number: GPIO27
-      mode:
-        input: true
-        pullup: false
-    name: "WP Nest Signal"
-    id: thermostat_signal
-    filters:
-      - delayed_on: 500ms # Debounce
-    icon: mdi:thermostat
   - platform: template
     name: "Boost mode active"
     id: boost_active
@@ -337,10 +295,10 @@ sensor:
     name: "COP guess"
     id: cop_guess
     lambda: |-
-      if(id(current_flow_rate).state < 6 || id(wp_delta_t).state <= 0) return 0;
+      if(id(wp_delta_t).state <= 0) return 0;
       if(!id(compressor_running).state || id(wp_sensed_power).state < 300) return 0;
       if(id(wp_delta_t).state < 0) return 0;
-      return ((id(current_flow_rate).state/60)*(id(wp_delta_t).state*4184))/id(wp_sensed_power).state;
+      return ((0.6)*(id(wp_delta_t).state*4184))/id(wp_sensed_power).state;
     accuracy_decimals: 1
     unit_of_measurement: "COP"
     update_interval: 60 sec
