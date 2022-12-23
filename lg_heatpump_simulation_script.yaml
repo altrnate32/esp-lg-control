@@ -1,0 +1,58 @@
+lambda: !lambda |-
+    static uint_fast32_t run_number = 0;
+    run_number++;
+    
+    if(id(compressor_running).state){
+      if(id(silent_mode_state).state) id(compressor_rpm).publish_state(30 + (rand() % 26));
+      else id(compressor_rpm).publish_state(56 + (rand() % 44));
+    } else {
+      if(id(thermostat_signal).state);
+      int dice = 1 + rand() % 6;
+      if(dice == 2 || dice == 3) id(compressor_running).publish_state(true);
+    }
+
+    if(run_number == 1){
+      id(buiten_temp).publish_state(10);
+      id(water_temp_aanvoer).publish_state(18);
+      id(water_temp_retour).publish_state(18);
+    } else if(run_number == 2){
+      //start
+      id(thermostat_signal).publish_state(true);
+    } else if(run_number == 4){
+      //starting
+      id(compressor_running).publish_state(true);
+      id(compressor_rpm).publish_state(56);
+      id(pump_running).publish_state(true);
+      id(water_temp_aanvoer).publish_state(25);
+      id(water_temp_retour).publish_state(21);
+      id(wp_sensed_power).publish_state(2000);
+    } else if(run_number == 5||run_number == 6||run_number == 7||run_number == 8||run_number == 9||run_number == 10){
+      //stabilize
+      id(water_temp_aanvoer).publish_state(id(water_temp_aanvoer).state + (rand() % 3));
+      id(water_temp_retour).publish_state(id(water_temp_retour).state + (rand() % 3));
+    } else {
+      //fully random operation
+      if(id(water_temp_aanvoer).state - id(water_temp_target_output).state < 0 ){
+        id(water_temp_aanvoer).publish_state(id(water_temp_aanvoer).state + (rand() % 3));
+        id(water_temp_retour).publish_state(id(water_temp_retour).state + (rand() % 3));
+        //if backup_heat is on it goes even faster
+        if(id(relay_backup_heat).state) {
+          id(water_temp_aanvoer).publish_state(id(water_temp_aanvoer).state + 1);
+          id(water_temp_retour).publish_state(id(water_temp_retour).state + 1);
+        }
+      } else {
+        id(water_temp_aanvoer).publish_state(id(water_temp_aanvoer).state -2 + (rand() % 3));
+        id(water_temp_retour).publish_state(id(water_temp_retour).state -2  + (rand() % 3));
+        int roll = (1 + rand() % 12);
+        if(roll == 1) id(defrosting).publish_state(true);
+        else if(roll == 2||roll == 3) id(defrosting).publish_state(false);
+        else if(roll == 4) id(sww_heating).publish_state(true);
+        else if(roll == 5||roll == 6) id(sww_heating).publish_state(false);
+        else if(roll == 7) id(thermostat_signal).publish_state(false);
+        else if(roll == 8 || roll == 9) id(thermostat_signal).publish_state(true);
+        else if(roll == 10) id(compressor_running).publish_state(false);
+        
+      }
+    }
+    if(id(water_temp_aanvoer).state < id(water_temp_retour).state) id(water_temp_retour).publish_state(id(water_temp_aanvoer).state-1);
+    

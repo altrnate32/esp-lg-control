@@ -22,7 +22,7 @@ esphome:
           
 packages:
   config_values: !include config/config_simulator.yaml
-  lg_modbus: !include lg_heatpump_simulation.yaml #include file with simulated modbus sensors
+  lg_modbus: !include lg_heatpump_fake_modbus.yaml #include file with simulated modbus sensors
   
 # Enable logging. Disable modbus controller debug messages
 logger:
@@ -241,9 +241,12 @@ switch:
     icon: mdi:thermometer-plus
 
 interval:
-  - interval: 30s
+  - interval: 10s
     id: state_machine
     then: !include { file: lg_heatpump_state_machine.yaml }
+  - interval: 20s
+    id: simulation
+    then: !include { file: lg_heatpump_simulation_script.yaml }
 
 binary_sensor:
   - platform: template

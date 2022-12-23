@@ -42,6 +42,8 @@ sensor:
     name: "Doeltemperatuur"
     id: doel_temp
     unit_of_measurement: "°C"
+    filters:
+      - multiply: 0.1
     icon: mdi:home-thermometer-outline
 
 number:

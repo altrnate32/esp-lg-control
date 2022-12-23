@@ -212,6 +212,9 @@
           input[WP_PUMP]->unflag();
           input[SILENT_MODE]->unflag();
         }
+        //***************************************************************
+        //*******************Stooklijn***********************************
+        //***************************************************************
         //calculate stooklijn function
         float calculate_stooklijn(){
           //Calculate stooklijn target
@@ -250,7 +253,9 @@
           id(watertemp_target).publish_state(new_stooklijn_target);
           return new_stooklijn_target;
         }
-        //handle on/off delay to publish TERMOSTAT state
+        //***************************************************************
+        //*******************Thermostat**********************************
+        //***************************************************************
         bool thermostat_state(){
           //if sensor and thermostat are the same, just return
           if(input[THERMOSTAT_SENSOR]->state == input[THERMOSTAT]->state) return input[THERMOSTAT]->state;
@@ -274,6 +279,9 @@
           //return previous state
           return input[THERMOSTAT]->state;
         }
+        //***************************************************************
+        //*******************Derivative**********************************
+        //***************************************************************
         void calculate_derivative(float tracking_value){
           float d_number = tracking_value;
           derivative.push_back(d_number);
@@ -298,6 +306,9 @@
           //publish new value
           id(derivative_value).publish_state(derivative_D_10*60);
         }
+        //***************************************************************
+        //*******************COP*****************************************
+        //***************************************************************
         void calculate_average_cop(){
           float current_cop = id(cop_guess).state;
           //prevent invalid readings
@@ -316,6 +327,9 @@
           }
           id(average_cop_sensor).publish_state(average_cop);
         }
+        //***************************************************************
+        //*******************Heat****************************************
+        //***************************************************************
         void heat(bool mode){
           if(mode){
             if(!id(relay_heat).state) {
@@ -341,6 +355,9 @@
             }
           }
         }
+        //***************************************************************
+        //*******************Pump****************************************
+        //***************************************************************
         void external_pump(bool mode){
           if(mode){
             if(!id(relay_pump).state) {
@@ -365,6 +382,9 @@
             }
           }
         }
+        //***************************************************************
+        //*******************Backup Heat*********************************
+        //***************************************************************
         void backup_heat(bool mode,bool cop_limit_trigger = false){
           if(mode){
             //relay heat must be on, otherwise it is an invalid request
@@ -395,26 +415,14 @@
             //all else can remain on
           }
         }
+        //***************************************************************
+        //*******************Boost***************************************
+        //***************************************************************
         void boost(bool mode){
           if(mode){
             if(!input[BOOST]->state) id(boost_switch).turn_on();
           } else {
             if(input[BOOST]->state) id(boost_switch).turn_off();
-          }
-        }
-        void silent_mode(bool mode){
-          if(mode){
-            if(!input[SILENT_MODE]->state){
-              id(silent_mode_switch).turn_on();
-              id(silent_mode_state).publish_state(true);
-              input[SILENT_MODE]->receive_state(true);
-            }
-          } else {
-            if(input[SILENT_MODE]->state){
-              id(silent_mode_switch).turn_off();
-              id(silent_mode_state).publish_state(false);
-              input[SILENT_MODE]->receive_state(false);
-            }
           }
         }
         void toggle_boost(){
@@ -433,6 +441,21 @@
         //***************************************************************
         //*******************Silent mode logic***************************
         //***************************************************************
+        void silent_mode(bool mode){
+          if(mode){
+            if(!input[SILENT_MODE]->state){
+              id(silent_mode_switch).turn_on();
+              id(silent_mode_state).publish_state(true);
+              input[SILENT_MODE]->receive_state(true);
+            }
+          } else {
+            if(input[SILENT_MODE]->state){
+              id(silent_mode_switch).turn_off();
+              id(silent_mode_state).publish_state(false);
+              input[SILENT_MODE]->receive_state(false);
+            }
+          }
+        }
         void toggle_silent_mode(){
           //if input[OAT]->value >= silent always on: silent on
           //if input[OAT]->value <= silent always off: silent off
@@ -440,25 +463,25 @@
 
           if(input[OAT]->value >= id(oat_silent_always_on).state) {
             if(!input[SILENT_MODE]->state){
-              ESP_LOGD(state_name(),"input[OAT]->value > oat_silent_always_off and silent mode off, switching silent mode on");
-              id(controller_info).publish_state("Switching Silent mode on input[OAT]->value > on");
+              ESP_LOGD(state_name(),"oat > oat_silent_always_off and silent mode off, switching silent mode on");
+              id(controller_info).publish_state("Switching Silent mode on oat > on");
               silent_mode(true);
             }
           } else if(input[OAT]->value <= id(oat_silent_always_off).state){
             if(input[SILENT_MODE]->state){
-              ESP_LOGD(state_name(),"Oat < oat_silent_always_on Switching silent mode off");
-              id(controller_info).publish_state("Switching silent mode off input[OAT]->value < oat_silent_always_off"); 
+              ESP_LOGD(state_name(),"Oat < oat_silent_always_off Switching silent mode off");
+              id(controller_info).publish_state("Switching silent mode off oat < oat_silent_always_off"); 
               silent_mode(false);
             }
           } else {
             if(input[BOOST]->state || state() == STALL) {
               if (input[SILENT_MODE]->state){
-              ESP_LOGD(state_name(),"Boost or stall silent mode off");
+              ESP_LOGD(state_name(),"OAT between silent mode brackets. Boost or stall silent mode off");
               id(controller_info).publish_state("STALL/Boost switching silent mode off");
               silent_mode(false);
               } else {
-                ESP_LOGD(state_name(),"input[OAT]->value between silent mode brackers. No boost/stall switching silent off");
-                id(controller_info).publish_state("Switching silent mode off input[OAT]->value in between");
+                ESP_LOGD(state_name(),"OAT between silent mode brackets. No boost/stall switching silent off");
+                id(controller_info).publish_state("Switching silent mode off oat in between");
                 silent_mode(false);
               }
             }
