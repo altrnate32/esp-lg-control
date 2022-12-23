@@ -82,8 +82,10 @@ lambda: !lambda |-
         fsm.boost(false);
         
         //check events
-        std::vector<input_types> events = {SWW_RUN,DEFROST_RUN};
-        if(fsm.check_change_events(events)) break;
+        fsm.start_events();
+        fsm.add_event(SWW_RUN);
+        fsm.add_event(DEFROST_RUN);
+        if(fsm.check_change_events()) break;
         //the 3 places where thermostat event does not lead to a switch off. Therefore not handled through check_change_events       
         if(fsm.input[THERMOSTAT]->state) {
           fsm.state_transition(START);
@@ -125,9 +127,14 @@ lambda: !lambda |-
         //enforce allowed config
         fsm.backup_heat(false);
         fsm.boost(false);
-        std::vector<input_types> events = {SWW_RUN,DEFROST_RUN,THERMOSTAT,RELAY_HEAT};
-        if(fsm.check_change_events(events)) break;
         
+        fsm.start_events();
+        fsm.add_event(SWW_RUN);
+        fsm.add_event(DEFROST_RUN);
+        fsm.add_event(THERMOSTAT);
+        fsm.add_event(RELAY_HEAT);
+        if(fsm.check_change_events()) break;
+                
         if(fsm.input[COMPRESSOR]->state){
           //we have ignition
           fsm.state_transition(STABILIZE);
@@ -137,7 +144,7 @@ lambda: !lambda |-
       case STABILIZE: {
         //DESCRIPTION: Transient state, wait for temperatures to stabilize then call run
         //INTERPRETS INPUTS: NONE
-        //RECEIVES EVENTS: SWW_RUN; DEFROST; THERMOSTAT OFF; RELAY_HEAT OFF; COMPRESSOR OFF 
+        //RECEIVES EVENTS: SWW_RUN; DEFROST; THERMOSTAT OFF; RELAY_HEAT OFF; COMPRESSOR OFF ; EMERGENCY
         //STATE TRANSITIONS: RUN; WAIT; SWW; DEFROST; AFTERRUN
         //ENFORCE CONFIG: BACKUP_HEAT OFF; BOOST OFF
         //SPECIAL: none
@@ -147,8 +154,13 @@ lambda: !lambda |-
         //enforce allowed config
         fsm.backup_heat(false);
         fsm.boost(false);
-        std::vector<input_types> events = {SWW_RUN,DEFROST_RUN,THERMOSTAT,RELAY_HEAT,COMPRESSOR};
-        if(fsm.check_change_events(events)) break;
+        fsm.start_events();
+        fsm.add_event(SWW_RUN);
+        fsm.add_event(DEFROST_RUN);
+        fsm.add_event(THERMOSTAT);
+        fsm.add_event(RELAY_HEAT);
+        fsm.add_event(COMPRESSOR);
+        if(fsm.check_change_events()) break;
 
         //check how far we are in the run
         if( (fsm.get_run_time() - fsm.get_run_start_time()) > (15*60) || ((fsm.get_run_time() - fsm.get_run_start_time()) > (6*60) && fsm.compressor_modulation())){
@@ -164,7 +176,8 @@ lambda: !lambda |-
         //else still early run
         //update target if tracking_value or stooklijn_target changed. No advanced modulation as this is useless during early run
         //limit number of updates to once every 5 minutes, unless run will be killed
-        if(fsm.input[TEMP_NEW_TARGET]->seconds_since_change() > (5*60)){
+        
+        if(fsm.pendel_delta >= fsm.hysteresis || fsm.input[TEMP_NEW_TARGET]->seconds_since_change() > (5*60)){
           if(fsm.delta > 0){
             fsm.input[TEMP_NEW_TARGET]->receive_value(max(fsm.input[STOOKLIJN_TARGET]->value+fsm.get_target_offset(),fsm.input[TRACKING_VALUE]->value-4));
             fsm.input[TEMP_NEW_TARGET]->receive_value(min(fsm.input[TEMP_NEW_TARGET]->value,fsm.input[STOOKLIJN_TARGET]->value+fsm.max_overshoot));
@@ -175,7 +188,7 @@ lambda: !lambda |-
       case RUN: {
         //DESCRIPTION: Run maintains a stable run and escallates to overshoot/stall when needed
         //INTERPRETS INPUTS: DELTA; PREDICTIONS
-        //RECEIVES EVENTS: SWW_RUN; DEFROST; THERMOSTAT OFF; RELAY_HEAT OFF; COMPRESSOR OFF 
+        //RECEIVES EVENTS: SWW_RUN; DEFROST; THERMOSTAT OFF; RELAY_HEAT OFF; COMPRESSOR OFF ; EMERGENCY;
         //STATE TRANSITIONS: WAIT; SWW; DEFROST; AFTERRUN; OVERSHOOT; STALL
         //ENFORCE CONFIG: NONE
         //SPECIAL: none
@@ -183,8 +196,15 @@ lambda: !lambda |-
           fsm.entry_done = true;
         }
         //enforce allowed config and check events
-        std::vector<input_types> events = {SWW_RUN,DEFROST_RUN,THERMOSTAT,RELAY_HEAT,COMPRESSOR,EMERGENCY,BACKUP_HEAT};
-        if(fsm.check_change_events(events)) break;
+        fsm.start_events();
+        fsm.add_event(SWW_RUN);
+        fsm.add_event(DEFROST_RUN);
+        fsm.add_event(THERMOSTAT);
+        fsm.add_event(RELAY_HEAT);
+        fsm.add_event(COMPRESSOR);
+        fsm.add_event(EMERGENCY);
+        fsm.add_event(BACKUP_HEAT);
+        if(fsm.check_change_events()) break;
         
         //check low COP
         if(fsm.check_low_cop_trigger() && fsm.input[BACKUP_HEAT]->seconds_since_change() > (15*60)) {
@@ -236,8 +256,13 @@ lambda: !lambda |-
         }
         //enforce allowed config and check events
         fsm.backup_heat(false);
-        std::vector<input_types> events = {SWW_RUN,DEFROST_RUN,THERMOSTAT,RELAY_HEAT,COMPRESSOR};
-        if(fsm.check_change_events(events)) break;
+        fsm.start_events();
+        fsm.add_event(SWW_RUN);
+        fsm.add_event(DEFROST_RUN);
+        fsm.add_event(THERMOSTAT);
+        fsm.add_event(RELAY_HEAT);
+        fsm.add_event(COMPRESSOR);
+        if(fsm.check_change_events()) break;
 
         if(fsm.delta < 1 && fsm.pred_20_delta_5 < 1.5 && fsm.pred_20_delta_10 < 1.5 ){
           //delta within range, are we done?
@@ -273,7 +298,7 @@ lambda: !lambda |-
         //Stall! Stall! Stall, I have control
         //DESCRIPTION: Logic to raise target to return back to stooklijn_target (and hopefully prevent overshoot)
         //INTERPRETS INPUTS: DELTA; PREDICTIONS
-        //RECEIVES EVENTS: SWW_RUN; DEFROST; THERMOSTAT OFF; RELAY_HEAT OFF; COMPRESSOR OFF 
+        //RECEIVES EVENTS: SWW_RUN; DEFROST; THERMOSTAT OFF; RELAY_HEAT OFF; COMPRESSOR OFF; EMERGENCY
         //STATE TRANSITIONS: RUN; WAIT; SWW; DEFROST; AFTERRUN
         //ENFORCE CONFIG: NONE
         //SPECIAL: none
@@ -281,8 +306,15 @@ lambda: !lambda |-
           fsm.entry_done = true;
         }
         //enforce allowed config
-        std::vector<input_types> events = {SWW_RUN,DEFROST_RUN,THERMOSTAT,RELAY_HEAT,COMPRESSOR,EMERGENCY, BACKUP_HEAT};
-        if(fsm.check_change_events(events)) break;
+        fsm.start_events();
+        fsm.add_event(SWW_RUN);
+        fsm.add_event(DEFROST_RUN);
+        fsm.add_event(THERMOSTAT);
+        fsm.add_event(RELAY_HEAT);
+        fsm.add_event(COMPRESSOR);
+        fsm.add_event(EMERGENCY);
+        fsm.add_event(BACKUP_HEAT);
+        if(fsm.check_change_events()) break;
         
         //check low COP
         if(fsm.check_low_cop_trigger() && fsm.input[BACKUP_HEAT]->seconds_since_change() > (15*60)) {
@@ -352,8 +384,13 @@ lambda: !lambda |-
           fsm.entry_done = true;
         }
         //enforce allowed config
-        std::vector<input_types> events = {SWW_RUN,DEFROST_RUN,THERMOSTAT,RELAY_HEAT, BACKUP_HEAT};
-        if(fsm.check_change_events(events)) break;
+        fsm.start_events();
+        fsm.add_event(SWW_RUN);
+        fsm.add_event(DEFROST_RUN);
+        fsm.add_event(THERMOSTAT);
+        fsm.add_event(RELAY_HEAT);
+        fsm.add_event(BACKUP_HEAT);
+        if(fsm.check_change_events()) break;
         
         //check if stooklijn value changed
         if(fsm.input[STOOKLIJN_TARGET]->has_flag()) {
@@ -384,8 +421,10 @@ lambda: !lambda |-
           } else id(controller_info).publish_state("Starting SWW with no backup heat.");
         }
         //enforce allowed config
-        std::vector<input_types> events = {DEFROST_RUN, BACKUP_HEAT};
-        if(fsm.check_change_events(events)) break;
+        fsm.start_events();
+        fsm.add_event(DEFROST_RUN);
+        fsm.add_event(BACKUP_HEAT);
+        if(fsm.check_change_events()) break;
         
         if(!fsm.input[SWW_RUN]->state){
           //end of SWW run
@@ -421,8 +460,9 @@ lambda: !lambda |-
           } else id(controller_info).publish_state("DEFROST backup heat off.");
         }
         //enforce allowed config
-        std::vector<input_types> events = {BACKUP_HEAT};
-        if(fsm.check_change_events(events)) break;
+        fsm.start_events();
+        fsm.add_event(BACKUP_HEAT);
+        if(fsm.check_change_events()) break;
 
         if(!fsm.input[DEFROST_RUN]->state){
           //defrosting stopped initially start with stooklijn_target as target
@@ -462,8 +502,9 @@ lambda: !lambda |-
         fsm.backup_heat(false);
         fsm.heat(false);
         fsm.boost(false);
-        std::vector<input_types> events = {SWW_RUN};
-        if(fsm.check_change_events(events)) break;
+        fsm.start_events();
+        fsm.add_event(SWW_RUN);
+        if(fsm.check_change_events()) break;
         //the 3 places where thermostat event does not lead to a switch off. Therefore not handled through check_change_events       
         if(fsm.input[THERMOSTAT]->state) {
           fsm.state_transition(START);

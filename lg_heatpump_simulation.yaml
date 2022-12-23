@@ -77,7 +77,7 @@ number:
     id: buiten_temp
     min_value: -10
     max_value: 25
-    initial_value: 20
+    initial_value: 10
     step: 1
     unit_of_measurement: "°C"
     optimistic: true

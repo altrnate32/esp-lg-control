@@ -35,7 +35,7 @@
         states current_state = INIT; //current state the machine is in
         states prev_state = NONE; //previous state
         states next_state = NONE; //next state (in case of state change)
-        std::vector<input_types> events; //vector with events (changed inputs)
+        std::vector<input_types> events; //vector with events to check
         uint_fast32_t run_time_value = 0; //total esp boot time
         uint_fast32_t state_start_time = 0; //run_time_value on last state change
         uint_fast32_t run_start_time = 0; //run_time_value of start of heat run
@@ -45,7 +45,7 @@
         float average_cop = 0; //keep track off average cop during last 15 minutes
         bool backup_heat_cop_limit_trigger = false; //if backup heat triggered due to low cop?
       public:
-        input_struct* input[11]; //list of all inputs
+        input_struct* input[16]; //list of all inputs
         bool entry_done = false;
         //default values, change these if you want
         int boost_offset = 2; //number of degrees to raise stooklijn in boost mode
@@ -77,6 +77,7 @@
             input[TEMP_NEW_TARGET] = new input_struct(&run_time_value);
             input[WP_PUMP] = new input_struct(&run_time_value);
             input[SILENT_MODE] = new input_struct(&run_time_value);
+            input[EMERGENCY] = new input_struct(&run_time_value);
         }
         ~ state_machine_class(){
             delete input[THERMOSTAT];
@@ -94,6 +95,7 @@
             delete input[TEMP_NEW_TARGET];
             delete input[WP_PUMP];
             delete input[SILENT_MODE];
+            delete input[EMERGENCY];
         }
         states state(){
             return current_state;
@@ -149,7 +151,7 @@
         //receive all values, booleans (states) or floats (values)
         void receive_inputs(){
           input[THERMOSTAT_SENSOR]->receive_state(id(thermostat_signal).state); //state of thermostat input
-          if(input[THERMOSTAT_SENSOR]->has_flag()) input[THERMOSTAT]->receive_state(thermostat_state());
+          input[THERMOSTAT]->receive_state(thermostat_state());
           input[COMPRESSOR]->receive_state(id(compressor_running).state); //is the compressor running
           input[SWW_RUN]->receive_state(id(sww_heating).state); //is the domestic hot water run active
           input[DEFROST_RUN]->receive_state(id(defrosting).state); //is defrost active
@@ -250,21 +252,21 @@
         }
         //handle on/off delay to publish TERMOSTAT state
         bool thermostat_state(){
+          //if sensor and thermostat are the same, just return
+          if(input[THERMOSTAT_SENSOR]->state == input[THERMOSTAT]->state) return input[THERMOSTAT]->state;
           //instant on
           if(state() == INIT && input[THERMOSTAT_SENSOR]->state) return true;
-          //if no change, return
-          if(input[THERMOSTAT_SENSOR]->state == input[THERMOSTAT]->state) return input[THERMOSTAT]->state; 
           //thermostat change
           if(input[THERMOSTAT_SENSOR]->state){
             //state change is a switch to on
             //check if on delay has passed
-            if((get_run_time() - input[THERMOSTAT_SENSOR]->input_change_time) > (id(thermostat_on_delay).state*60)) return true;
+            if(input[THERMOSTAT_SENSOR]->seconds_since_change() > (id(thermostat_on_delay).state*60)) return true;
           } else {
             //state change is a switch to off
             //check for instant off
             if(!input[COMPRESSOR]->state || state() == SWW || state() == DEFROST) return false;
             //check if off delay time has passed
-            if((get_run_time() - input[THERMOSTAT_SENSOR]->input_change_time) > (id(thermostat_off_delay).state*60)) {
+            if(input[THERMOSTAT_SENSOR]->seconds_since_change() > (id(thermostat_off_delay).state*60)) {
               //then check if minimum run time has passed
               if((get_run_time() - run_start_time) > (id(minimum_run_time).state * 60))return false;
             }
@@ -316,17 +318,23 @@
         }
         void heat(bool mode){
           if(mode){
-            if(!id(relay_heat).state) id(relay_heat).turn_on();
+            if(!id(relay_heat).state) {
+              id(relay_heat).turn_on();
+              input[RELAY_HEAT]->receive_state(true);
+            }
             //if relay heat is turned on, relay_pump must also be turned on
-            if(!id(relay_pump).state){
+            if(!input[EXTERNAL_PUMP]->state){
               external_pump(true);
               ESP_LOGD(state_name(),"Invalid configuration relay_heat on before relay_pump.");
               id(controller_info).publish_state("Invalid config: heat on before pump.");
             }
           } else {
-            if(id(relay_heat).state) id(relay_heat).turn_off();
+            if(id(relay_heat).state) {
+              id(relay_heat).turn_off();
+              input[RELAY_HEAT]->receive_state(false);
+            }
             //external pump can remain on, backup heater must be off
-            if(id(relay_backup_heat).state){
+            if(input[BACKUP_HEAT]->state){
               backup_heat(false);
               ESP_LOGD(state_name(),"Invalid configuration relay_heat off before relay_backup_heat off.");
               id(controller_info).publish_state("Invalid config: heat off before backup_heat");
@@ -335,36 +343,44 @@
         }
         void external_pump(bool mode){
           if(mode){
-            if(!id(relay_pump).state) id(relay_pump).turn_on();
+            if(!id(relay_pump).state) {
+              id(relay_pump).turn_on();
+              input[EXTERNAL_PUMP]->receive_state(true);
+            }
           } else {
-            if(id(relay_heat).state){
-              id(relay_heat).turn_off();
+            if(input[RELAY_HEAT]->state){
+              heat(false);
               ESP_LOGD(state_name(),"Invalid configuration relay_pump off before relay_heat");
               id(controller_info).publish_state("Invalid config: pump off before heat");
             }
-            //external pump can remain on, backup heater must be off
-            if(id(relay_backup_heat).state){
-              id(relay_backup_heat).turn_off();
+            //backup heater must be off
+            if(input[BACKUP_HEAT]->state){
+              backup_heat(false);
               ESP_LOGD(state_name(),"Invalid configuration relay_pump off before relay_backup_heat");
               id(controller_info).publish_state("Invalid config: pump off before backup_heat");
+            }
+            if(id(relay_pump).state){
+              id(relay_pump).turn_off();
+              input[EXTERNAL_PUMP]->receive_state(false);
             }
           }
         }
         void backup_heat(bool mode,bool cop_limit_trigger = false){
           if(mode){
             //relay heat must be on, otherwise it is an invalid request
-            if(!id(relay_heat).state){
+            if(!input[RELAY_HEAT]->state){
               //do not turn on
               ESP_LOGD(state_name(),"Invalid configuration relay_backup_heat on before relay_heat.");
               id(controller_info).publish_state("ERROR: backup_heat on before heat.");
             } else {
               if(!id(relay_backup_heat).state){
                 id(relay_backup_heat).turn_on();
+                input[BACKUP_HEAT]->receive_state(true);
                 if(cop_limit_trigger) backup_heat_cop_limit_trigger = true;
                 id(controller_info).publish_state("Backup heat on due to low COP");
               }
               //if relay_backup_heat is turned on, relay_pump must also be turned on
-              if(!id(relay_pump).state){
+              if(!input[EXTERNAL_PUMP]->state){
                 external_pump(true);
                 ESP_LOGD(state_name(),"Invalid configuration relay_backup_heat on before relay_pump.");
                 id(controller_info).publish_state("Invalid config: backup_heat on before pump.");
@@ -372,7 +388,10 @@
               backup_heat_cop_limit_trigger = false;
             }
           } else {
-            if(id(relay_backup_heat).state) id(relay_backup_heat).turn_off();
+            if(id(relay_backup_heat).state){
+              id(relay_backup_heat).turn_off();
+              input[BACKUP_HEAT]->receive_state(false);
+            } 
             //all else can remain on
           }
         }
@@ -455,32 +474,39 @@
           //TODO check for multiple target changes during run
           if(new_target != input[TEMP_NEW_TARGET]->value) input[TEMP_NEW_TARGET]->receive_value(new_target);
         }
-        bool check_change_events(std::vector<input_types> events){
+        void start_events(){
+          events.clear();
+        }
+        void add_event(input_types ev){
+          events.push_back(ev);
+        }
+        bool check_change_events(){
           std::vector<input_types>::iterator it;
+          bool state_change = false;
           for(it = events.begin(); it != events.end(); it++){
             if(*it == DEFROST_RUN){
               if(input[DEFROST_RUN]->state) {
                 state_transition(DEFROST);
                 ESP_LOGD(state_name(), "DEFROST run detected next state: DEFROST");
-                return true;
+                state_change = true;
               }
             } else if(*it == SWW_RUN){  
               if(input[SWW_RUN]->state) {
                 state_transition(SWW);
                 ESP_LOGD(state_name(), "SWW run detected next state: SWW");
-                return true;
+                state_change = true;
               }
             } else if(*it == DEFROST_RUN){
               if(input[DEFROST_RUN]->state) {
                 state_transition(DEFROST);
                 ESP_LOGD(state_name(), "DEFROST run detected next state: DEFROST");
-                return true;
+                state_change = true;
               }
             } else if(*it == THERMOSTAT){
               if(!input[THERMOSTAT]->state) {
                 state_transition(AFTERRUN);
                 ESP_LOGD(state_name(), "THERMOSTAT OFF next state: AFTERRUN");
-                return true;
+                state_change = true;
               }
             } else if(*it == RELAY_HEAT){
               if(!input[RELAY_HEAT]->state){
@@ -490,28 +516,27 @@
                   id(relay_heat).turn_on();
                   ESP_LOGD(state_name(), "RELAY_HEAT OFF, but thermostat_sensor on switched relay_heat back on");
                   id(controller_info).publish_state("Heat switched off; thermostat on. Heat back on");
-                  return false; //keep current state
                 } else {
                   state_transition(AFTERRUN);
                   ESP_LOGD(state_name(), "RELAY_HEAT OFF next state: AFTERRUN");
                   id(controller_info).publish_state("Starting: heat switched off. Aborting");
+                  state_change = true;
                 }
-                return true;
               }
             } else if(*it == COMPRESSOR){
               if(!input[COMPRESSOR]->state){
                 //COMPRESSOR switched off. Failed run
                 state_transition(WAIT);
                 ESP_LOGD(state_name(), "Failed run detected next state: WAIT");
-                return true;
+                state_change = true;
               }
             } else if(*it == EMERGENCY){
               if(pendel_delta >= hysteresis){
                 state_transition(OVERSHOOT);
-                return false;
+                state_change = true;
               }
             } else if(*it == BACKUP_HEAT){
-              if(input[BACKUP_HEAT]){
+              if(input[BACKUP_HEAT]->state){
                 if(!input[RELAY_HEAT]->state || !input[THERMOSTAT]->state) {
                   backup_heat(false);
                   ESP_LOGD(state_name(),"Backup heat off no heat request (relay_heat off)");
@@ -526,11 +551,11 @@
                   ESP_LOGD(state_name(),"Backup heat off due to cop improved");
                   id(controller_info).publish_state("Backup heat off due to cop improvement");
                 }
-                return false;
               }
             }
           }
-          return false;
+          events.clear();
+          return state_change;
         }
         bool compressor_modulation(){
           if(input[SILENT_MODE]->state && id(compressor_rpm).state <= 50) return true;
