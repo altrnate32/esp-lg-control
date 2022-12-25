@@ -396,8 +396,18 @@
               if(!id(relay_backup_heat).state){
                 id(relay_backup_heat).turn_on();
                 input[BACKUP_HEAT]->receive_state(true);
-                if(cop_limit_trigger) backup_heat_cop_limit_trigger = true;
-                id(controller_info).publish_state("Backup heat on due to low COP");
+                if(cop_limit_trigger) {
+                  backup_heat_cop_limit_trigger = true;
+                  id(controller_info).publish_state("Backup heat on due to low COP");
+                } else if(input[SWW_RUN]->state) {
+                  id(controller_info).publish_state("Backup heat on due to SWW run");
+                } else if(input[DEFROST_RUN]->state) {
+                  id(controller_info).publish_state("Backup heat on due to Defrost");
+                } else if(state() == STALL){
+                  id(controller_info).publish_state("Backup heat on due to STALL");
+                } else {
+                  id(controller_info).publish_state("Backup heat on");
+                }
               }
               //if relay_backup_heat is turned on, relay_pump must also be turned on
               if(!input[EXTERNAL_PUMP]->state){

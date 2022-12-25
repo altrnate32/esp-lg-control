@@ -43,7 +43,7 @@ lambda: !lambda |-
       id(current_flow_rate).publish_state(0);
       id(pump_running).publish_state(false);
       run_time_number = 0;
-    } else {
+    } else if(!id(defrosting).state){
       if(!id(pump_running).state) id(pump_running).publish_state(true);
       if(id(current_flow_rate).state != flow_rate) id(current_flow_rate).publish_state(flow_rate);
       if(id(compressor_running).state){
@@ -136,6 +136,10 @@ lambda: !lambda |-
         id(defrosting).publish_state(false);
         run_time_number = 3;      
       }
-      id(water_temp_retour).publish_state( round((id(water_temp_retour).state-0.4)*10)/10 );
+      if(!id(relay_backup_heat).state){
+        id(water_temp_retour).publish_state( round((id(water_temp_retour).state-0.4)*10)/10 );
+      } else {
+        id(water_temp_retour).publish_state( round((id(water_temp_retour).state-0.1)*10)/10 );
+      }
       runs_defrost++;
     } else runs_defrost = 0;      

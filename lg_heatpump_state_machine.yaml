@@ -364,7 +364,6 @@ lambda: !lambda |-
           //it will still not be fixed next 30 minutes
           if(fsm.input[OAT]->value < id(backup_heater_active_temp).state && !id(relay_backup_heat).state){
             id(relay_backup_heat).turn_on();
-            id(controller_info).publish_state("STALL backup heat on");
             ESP_LOGD(fsm.state_name(), "tracking_value stalled, switched backup_heater on");
           }
           break;  
@@ -417,7 +416,6 @@ lambda: !lambda |-
           fsm.entry_done = true;
           if(fsm.input[THERMOSTAT]->state && fsm.input[OAT]->value <= id(backup_heater_active_temp).state){
             fsm.backup_heat(true);
-            id(controller_info).publish_state("Starting SWW with backup heat.");
           } else id(controller_info).publish_state("Starting SWW with no backup heat.");
         }
         //enforce allowed config
@@ -457,7 +455,7 @@ lambda: !lambda |-
           fsm.entry_done = true;
           if(fsm.input[THERMOSTAT]->state && fsm.input[OAT]->value <= id(backup_heater_active_temp).state){
             fsm.backup_heat(true);
-          } else id(controller_info).publish_state("DEFROST backup heat off.");
+          } else id(controller_info).publish_state("DEFROST with backup heat off.");
         }
         //enforce allowed config
         fsm.start_events();
