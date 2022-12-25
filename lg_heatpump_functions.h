@@ -411,6 +411,7 @@
             if(id(relay_backup_heat).state){
               id(relay_backup_heat).turn_off();
               input[BACKUP_HEAT]->receive_state(false);
+              backup_heat_cop_limit_trigger = false;
             } 
             //all else can remain on
           }

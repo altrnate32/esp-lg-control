@@ -41,8 +41,10 @@ lambda: !lambda |-
       id(compressor_running).publish_state(false);
       id(compressor_rpm).publish_state(0);
       id(current_flow_rate).publish_state(0);
+      id(pump_running).publish_state(false);
       run_time_number = 0;
     } else {
+      if(!id(pump_running).state) id(pump_running).publish_state(true);
       if(id(current_flow_rate).state != flow_rate) id(current_flow_rate).publish_state(flow_rate);
       if(id(compressor_running).state){
         if(delta > 4) runs_too_high++;
@@ -53,8 +55,8 @@ lambda: !lambda |-
         } else if(run_time_number > 15){
           if(last_modulation > 4 && rand() % 4 <= 3 ){
             last_modulation = 0;
-            if(delta < -2) id(compressor_rpm).publish_state(std::min(id(compressor_rpm).state+(abs(delta)*7),compressor_max));
-            else if(delta > 2) id(compressor_rpm).publish_state(std::max(id(compressor_rpm).state-(delta*7),(float)15));
+            if(delta < -2) id(compressor_rpm).publish_state(std::min((int)id(compressor_rpm).state+(abs(delta)*7),compressor_max));
+            else if(delta > 2) id(compressor_rpm).publish_state((int)std::max(id(compressor_rpm).state-(delta*7),(float)15));
           } else {
             last_modulation++;
           }
@@ -90,12 +92,12 @@ lambda: !lambda |-
       if(power_used < 500) power_used = 500;
       energy_gain = power_delivered;
     }
-    id(wp_sensed_power).publish_state(power_used + 100);
+    id(wp_sensed_power).publish_state(round(power_used + 100));
     if(id(relay_backup_heat).state){
       energy_gain = energy_gain + backup_power_watt;
     }
     float delta_t = 0;
-    if(id(current_flow_rate).state > 0 && energy_gain > 0){
+    if(id(current_flow_rate).state > 0 && (id(current_flow_rate).state/60) > 0 && energy_gain > 0){
       delta_t = (energy_gain/4186)/(id(current_flow_rate).state/60);
     }
     float nett_energy_gain = energy_gain - energy_needed;
@@ -117,12 +119,23 @@ lambda: !lambda |-
       } 
     }
     if(id(defrosting).state){
-      if(runs_defrost > 5){
+      if(runs_defrost == 0){
+        id(compressor_rpm).publish_state(0);
+        id(compressor_running).publish_state(false);
+      } else if(runs_defrost == 2){
+        id(compressor_rpm).publish_state(30);
+        id(compressor_running).publish_state(true);
+      } else if(runs_defrost == 3){
+        id(compressor_rpm).publish_state(60);
+      } else if(runs_defrost == 4){
+        id(compressor_rpm).publish_state(30);
+      } else if(runs_defrost == 5){
+        id(compressor_rpm).publish_state(0);
+        id(compressor_running).publish_state(false);
+      } else if(runs_defrost > 7){
         id(defrosting).publish_state(false);
-        run_time_number = 3;
-        runs_defrost = 0;
-      } else {
-        id(water_temp_retour).publish_state( round((id(water_temp_retour).state-0.7)*10)/10 );
-        runs_defrost++;
+        run_time_number = 3;      
       }
-    }       
+      id(water_temp_retour).publish_state( round((id(water_temp_retour).state-0.4)*10)/10 );
+      runs_defrost++;
+    } else runs_defrost = 0;      
