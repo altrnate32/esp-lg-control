@@ -4,58 +4,66 @@
 
 switch:
   - platform: template
-    name: "Silent Mode Switch"
+    name: "Silent Mode Switch Sim"
     id: silent_mode_switch
     icon: mdi:volume-off
     optimistic: true
   - platform: template
-    name: "SWW On/Off Switch"
+    name: "SWW On/Off Switch Sim"
     id: sww_on_off
     icon: mdi:shower-head
     optimistic: true
   - platform: template
-    name: "Pump Running sensor"
+    name: "Pump Running sensor Sim"
     id: pump_running
     optimistic: true
   - platform: template
-    name: "Compressor Running sensor"
+    name: "Compressor Running sensor Sim"
     id: compressor_running
     icon: mdi:car-turbocharger
     optimistic: true
   - platform: template
-    name: "Defrosting sensor"
+    name: "Defrosting sensor Sim"
     id: defrosting
     optimistic: true
   - platform: template
-    name: "SWW Heating sensor"
+    name: "SWW Heating sensor Sim"
     id: sww_heating
     icon: mdi:shower-head
     optimistic: true
   - platform: template
-    name: "Silent Mode state sensor"
+    name: "Silent Mode state sensor Sim"
     id: silent_mode_state
     icon: mdi:volume-off
     optimistic: true
 
 sensor:
   - platform: template
-    name: "Doeltemperatuur"
+    name: "Doeltemperatuur Sim"
     id: doel_temp
     unit_of_measurement: "°C"
+    accuracy_decimals: 0
     filters:
       - multiply: 0.1
     icon: mdi:home-thermometer-outline
+  - platform: template
+    name: "Flow Rate Sim"
+    id: current_flow_rate
+    unit_of_measurement: "L/m"
+    accuracy_decimals: 1
+    icon: mdi:waves-arrow-right
 
 number:
   - platform: template
     id: water_temp_target_output
+    name: "Water Temp Target Output Sim"
     step: 1
     min_value: 20
     max_value: 50
     initial_value: 20
     optimistic: true
   - platform: template
-    name: "Water retour"
+    name: "Water retour Sim"
     id: water_temp_retour
     min_value: 20
     max_value: 50
@@ -65,7 +73,7 @@ number:
     icon: mdi:thermometer-chevron-down
     optimistic: true
   - platform: template
-    name: "Water aanvoer"
+    name: "Water aanvoer Sim"
     id: water_temp_aanvoer
     min_value: 20
     max_value: 50
@@ -75,25 +83,17 @@ number:
     icon: mdi:thermometer-chevron-up
     optimistic: true
   - platform: template
-    name: "Buitentemperatuur"
+    name: "Buitentemperatuur Sim"
     id: buiten_temp
     min_value: -10
     max_value: 25
     initial_value: 10
-    step: 1
+    step: 0.1
     unit_of_measurement: "°C"
     optimistic: true
     icon: mdi:weather-cloudy
-    on_value:
-      then:
-        - lambda: !lambda |-
-            static float prev_oat = -100.0;
-            if (abs(round(x) - round(prev_oat)) > 0.1) {
-              id(update_stooklijn) = true;
-              prev_oat = x;
-            }
   - platform: template
-    name: "WP Sensed Power"
+    name: "WP Sensed Power Sim"
     id: wp_sensed_power
     min_value: 100
     max_value: 4000
@@ -103,7 +103,7 @@ number:
     icon: mdi:meter-electric-outline
     optimistic: true
   - platform: template
-    name: "Compressor RPM"
+    name: "Compressor RPM Sim"
     id: compressor_rpm
     min_value: 0
     max_value: 100

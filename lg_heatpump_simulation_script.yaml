@@ -1,58 +1,128 @@
 lambda: !lambda |-
-    static uint_fast32_t run_number = 0;
-    run_number++;
-    
-    if(id(compressor_running).state){
-      if(id(silent_mode_state).state) id(compressor_rpm).publish_state(30 + (rand() % 26));
-      else id(compressor_rpm).publish_state(56 + (rand() % 44));
-    } else {
-      if(id(thermostat_signal).state);
-      int dice = 1 + rand() % 6;
-      if(dice == 2 || dice == 3) id(compressor_running).publish_state(true);
+    static uint_fast32_t run_time_number = 0;
+    if(run_time_number == 0){
+      srand(time(0));
     }
+    run_time_number++;
+    
+    //one run is 1 minute (simulated)
 
-    if(run_number == 1){
-      id(buiten_temp).publish_state(10);
-      id(water_temp_aanvoer).publish_state(18);
-      id(water_temp_retour).publish_state(18);
-    } else if(run_number == 2){
-      //start
-      id(thermostat_signal).publish_state(true);
-    } else if(run_number == 4){
-      //starting
-      id(compressor_running).publish_state(true);
-      id(compressor_rpm).publish_state(56);
-      id(pump_running).publish_state(true);
-      id(water_temp_aanvoer).publish_state(25);
-      id(water_temp_retour).publish_state(21);
-      id(wp_sensed_power).publish_state(2000);
-    } else if(run_number == 5||run_number == 6||run_number == 7||run_number == 8||run_number == 9||run_number == 10){
-      //stabilize
-      id(water_temp_aanvoer).publish_state(id(water_temp_aanvoer).state + (rand() % 3));
-      id(water_temp_retour).publish_state(id(water_temp_retour).state + (rand() % 3));
+    static int runs_sww = 0;
+    static int runs_defrost = 0;
+    static int runs_too_high = 0;
+    static int last_modulation = 0;
+    static int flow_rate = 35; //in liters/minute
+    static int backup_power_watt = 6000;
+    static int max_output = 14000; //in watt
+    static int max_power = 7000; //in watt
+    static int system_water_quantity = 200; //in liters
+    float compressor_max = 100;
+    if(id(silent_mode_state).state) compressor_max = 56;
+    float delta = (id(water_temp_aanvoer).state - id(water_temp_target_output).state);
+
+    //choose oat direction
+    int direction = rand() % 3;
+    float oat_change = 0;
+    if(direction == 1){
+      //plus; choose amount (between 0 and .5)
+      oat_change = (rand() % 8);
+    }else if(direction == 2){
+      //minus
+      oat_change = 0 - (rand() % 8);
+    }
+    oat_change = oat_change/10;
+    float new_oat = id(buiten_temp).state + oat_change;
+    if(new_oat > 20) new_oat = 20;
+    else if(new_oat < -10) new_oat = -10;
+    new_oat = round(new_oat*10)/10;
+    id(buiten_temp).publish_state(new_oat); 
+
+    if(!id(relay_heat).state){
+      id(compressor_running).publish_state(false);
+      id(compressor_rpm).publish_state(0);
+      id(current_flow_rate).publish_state(0);
+      run_time_number = 0;
     } else {
-      //fully random operation
-      if(id(water_temp_aanvoer).state - id(water_temp_target_output).state < 0 ){
-        id(water_temp_aanvoer).publish_state(id(water_temp_aanvoer).state + (rand() % 3));
-        id(water_temp_retour).publish_state(id(water_temp_retour).state + (rand() % 3));
-        //if backup_heat is on it goes even faster
-        if(id(relay_backup_heat).state) {
-          id(water_temp_aanvoer).publish_state(id(water_temp_aanvoer).state + 1);
-          id(water_temp_retour).publish_state(id(water_temp_retour).state + 1);
+      if(id(current_flow_rate).state != flow_rate) id(current_flow_rate).publish_state(flow_rate);
+      if(id(compressor_running).state){
+        if(delta > 4) runs_too_high++;
+        else runs_too_high = 0;
+        if(runs_too_high > 5) {
+          id(compressor_running).publish_state(false);
+          id(compressor_rpm).state = 0;
+        } else if(run_time_number > 15){
+          if(last_modulation > 4 && rand() % 4 <= 3 ){
+            last_modulation = 0;
+            if(delta < -2) id(compressor_rpm).publish_state(std::min(id(compressor_rpm).state+(abs(delta)*7),compressor_max));
+            else if(delta > 2) id(compressor_rpm).publish_state(std::max(id(compressor_rpm).state-(delta*7),(float)15));
+          } else {
+            last_modulation++;
+          }
         }
       } else {
-        id(water_temp_aanvoer).publish_state(id(water_temp_aanvoer).state -2 + (rand() % 3));
-        id(water_temp_retour).publish_state(id(water_temp_retour).state -2  + (rand() % 3));
-        int roll = (1 + rand() % 12);
-        if(roll == 1) id(defrosting).publish_state(true);
-        else if(roll == 2||roll == 3) id(defrosting).publish_state(false);
-        else if(roll == 4) id(sww_heating).publish_state(true);
-        else if(roll == 5||roll == 6) id(sww_heating).publish_state(false);
-        else if(roll == 7) id(thermostat_signal).publish_state(false);
-        else if(roll == 8 || roll == 9) id(thermostat_signal).publish_state(true);
-        else if(roll == 10) id(compressor_running).publish_state(false);
-        
+        if(delta < -2) id(compressor_running).publish_state(true);
+        id(compressor_rpm).publish_state(compressor_max);
+        run_time_number = 0;
       }
     }
-    if(id(water_temp_aanvoer).state < id(water_temp_retour).state) id(water_temp_retour).publish_state(id(water_temp_aanvoer).state-1);
+
+    float cop = 0;
+    float energy_needed = 0;
+    if(id(buiten_temp).state < -10) {
+      cop = 1.2;
+      energy_needed = 10000;
+    } else {
+      cop = (1.2 + (0.15 * (id(buiten_temp).state + 10)));
+      if(cop > 6) cop = 6;
+      energy_needed = max(10000 - (300 * (id(buiten_temp).state + 10)), (float)3000);  
+    }
+    float power_delivered = 0;
+    if(id(compressor_running).state && !id(defrosting).state && !id(sww_heating).state){
+      power_delivered = ((float)id(compressor_rpm).state * (max_output/100));
+      if(power_delivered > max_output) power_delivered = max_output;
+    }
+    float power_used = 100;
+    float energy_gain = 0;
+    if(power_delivered > 0 && cop > 0){
+      power_used = power_delivered/cop;
+      if(power_used > max_power) power_used = max_power;
+      if(power_delivered > max_power * cop) power_delivered = max_power * cop;
+      if(power_used < 500) power_used = 500;
+      energy_gain = power_delivered;
+    }
+    id(wp_sensed_power).publish_state(power_used + 100);
+    if(id(relay_backup_heat).state){
+      energy_gain = energy_gain + backup_power_watt;
+    }
+    float delta_t = 0;
+    if(id(current_flow_rate).state > 0 && energy_gain > 0){
+      delta_t = (energy_gain/4186)/(id(current_flow_rate).state/60);
+    }
+    float nett_energy_gain = energy_gain - energy_needed;
+    float nett_temperature_gain = ((nett_energy_gain * 60)/system_water_quantity)/4186;
+    float return_temp = max((float)17,id(water_temp_retour).state + nett_temperature_gain);
+    id(water_temp_retour).publish_state(round(return_temp*10)/10);
+    id(water_temp_aanvoer).publish_state( round( (id(water_temp_retour).state + delta_t)*10)/10 );
     
+    if(run_time_number > 15){
+      if(id(buiten_temp).state < 3 && id(compressor_running).state && !id(defrosting).state && !id(sww_heating).state){
+        //add some defrosts. every run the chance increases
+        int roll = 90 - run_time_number;
+        if(roll < 1) roll = 1;
+        int dice = rand() % roll;
+        if(dice == 1){
+          runs_defrost = 0;
+          id(defrosting).publish_state(true);
+        }
+      } 
+    }
+    if(id(defrosting).state){
+      if(runs_defrost > 5){
+        id(defrosting).publish_state(false);
+        run_time_number = 3;
+        runs_defrost = 0;
+      } else {
+        id(water_temp_retour).publish_state( round((id(water_temp_retour).state-0.7)*10)/10 );
+        runs_defrost++;
+      }
+    }       
