@@ -4,7 +4,7 @@ substitutions:
 esphome:
   name: "${device_name}"
   includes:
-    - lg_heatpump_functions.h
+    - lg-heatpump-control/lg-heatpump-state-machine.h
   on_boot:
     priority: 200
     then:
@@ -21,8 +21,8 @@ esphome:
           id(controller_state).publish_state("Initialiseren");
           
 packages:
-  config_values: !include config/config_simulator.yaml
-  lg_modbus: !include lg_heatpump_fake_modbus.yaml #include file with simulated modbus sensors
+  config_values: !include lg-heatpump-control/config/config_simulator.yaml
+  lg_modbus: !include lg-heatpump-control/sim/lg-fake-modbus.yaml #include file with simulated modbus sensors
   
 # Enable logging. Disable modbus controller debug messages
 logger:
@@ -243,10 +243,10 @@ switch:
 interval:
   - interval: 10s
     id: state_machine
-    then: !include { file: lg_heatpump_state_machine.yaml }
+    then: !include { file: lg-heatpump-control/lg-heatpump-state-machine.yaml }
   - interval: 20s
     id: simulation
-    then: !include { file: lg_heatpump_simulation_script.yaml }
+    then: !include { file: lg-heatpump-control/sim/lg-heatpump-simulation-script.yaml }
 
 binary_sensor:
   - platform: template

@@ -546,5 +546,3 @@ lambda: !lambda |-
     fsm.unflag_input_values();
     //Complete state transition that was initiated
     fsm.handle_state_transition();
-
-    return;

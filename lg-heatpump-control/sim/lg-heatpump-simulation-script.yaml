@@ -17,7 +17,7 @@ lambda: !lambda |-
     const static int system_water_quantity = 220; //in liters
     float compressor_max = 100;
     if(id(silent_mode_state).state) compressor_max = 56;
-    float delta = (id(water_temp_aanvoer).state - id(water_temp_target_output).state);
+    float delta = (id(water_temp_aanvoer).state - id(doel_temp).state);
     static bool compressor_change_run = false;
     static float compressor_target = 0;
 
@@ -62,8 +62,8 @@ lambda: !lambda |-
             last_modulation++;
           }
         }
-      } else {
-        if(delta < -2) id(compressor_running).publish_state(true);
+      } else if(delta < 2){
+        id(compressor_running).publish_state(true);
         id(compressor_rpm).publish_state(21);
         run_time_number = 0;
         compressor_change_run = true;

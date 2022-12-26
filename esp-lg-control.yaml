@@ -4,7 +4,7 @@ substitutions:
 esphome:
   name: "${device_name}"
   includes:
-    - lg_heatpump_functions.h
+    - lg-heatpump-control/lg-heatpump-state-machine.h
   on_boot:
     priority: 200
     then:
@@ -21,9 +21,9 @@ esphome:
           id(controller_state).publish_state("Initialiseren");
           
 packages:
-  config_values: !include config/config.yaml
-  lg_modbus: !include lg_heatpump_modbus.yaml #include file with modbus sensors
-  lg_dallas_temp: !include lg_dallas_temp.yaml #optional file with dallas temp probes (disable if not used)
+  config_values: !include lg-heatpump-control/config/config.yaml
+  lg_modbus: !include lg-heatpump-control/sensors/lg-heatpump-modbus.yaml #include file with modbus sensors
+  lg_dallas_temp: !include lg-heatpump-control/sensors/lg-dallas-temp.yaml #optional file with dallas temp probes (disable if not used)
 
 # Enable logging. Disable modbus controller debug messages
 logger:
@@ -274,7 +274,7 @@ switch:
 interval:
   - interval: 30s
     id: state_machine
-    then: !include { file: lg_heatpump_state_machine.yaml }
+    then: !include { file: lg-heatpump-control/lg-heatpump-state-machine.yaml }
 
 binary_sensor:
   - platform: gpio # Thermostat input signal is connected to this input pin
