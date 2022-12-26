@@ -405,7 +405,6 @@ lambda: !lambda |-
         break;
       }
       case SWW: {
-        //TODO -> also check if thermostat switched on
         //DESCRIPTION: SWW RUN. Monitor and decide on next state
         //INTERPRETS INPUTS: NONE
         //RECEIVES EVENTS: DEFROST; THERMOSTAT OFF; RELAY_HEAT OFF;
@@ -421,9 +420,16 @@ lambda: !lambda |-
         //enforce allowed config
         fsm.start_events();
         fsm.add_event(DEFROST_RUN);
+        fsm.add_event(THERMOSTAT);
+        fsm.add_event(RELAY_HEAT);
         fsm.add_event(BACKUP_HEAT);
         if(fsm.check_change_events()) break;
-        
+        if(fsm.input[THERMOSTAT]->has_flag() && fsm.input[THERMOSTAT]->state){
+          if(fsm.input[OAT]->value <= id(backup_heater_active_temp).state){
+            fsm.backup_heat(true);
+            id(controller_info).publish_state("SWW thermostat on: backup heat on");
+          }
+        }
         if(!fsm.input[SWW_RUN]->state){
           //end of SWW run
           if(!fsm.input[THERMOSTAT_SENSOR]->state){
@@ -437,6 +443,7 @@ lambda: !lambda |-
             if(!fsm.input[BACKUP_HEAT]->state){
               if(fsm.input[OAT]->value > id(backup_heater_active_temp).state) fsm.boost(true);
               id(controller_info).publish_state("SWW done starting boost.");
+              fsm.boost(true);
             }
             fsm.input[TEMP_NEW_TARGET]->receive_value(fsm.input[STOOKLIJN_TARGET]->value);
             break;
@@ -459,6 +466,8 @@ lambda: !lambda |-
         }
         //enforce allowed config
         fsm.start_events();
+        fsm.add_event(THERMOSTAT);
+        fsm.add_event(RELAY_HEAT);
         fsm.add_event(BACKUP_HEAT);
         if(fsm.check_change_events()) break;
 
