@@ -1,0 +1,114 @@
+#This file replaces lg_heatpump_modbus.yaml
+#All modbus sensors are replaced by dummy switches or inputs to be able to manually simulate heatpump responses
+#This allows testing of new firmwares on a separate esp 
+
+switch:
+  - platform: template
+    name: "Silent Mode Switch Sim"
+    id: silent_mode_switch
+    icon: mdi:volume-off
+    optimistic: true
+  - platform: template
+    name: "SWW On/Off Switch Sim"
+    id: sww_on_off
+    icon: mdi:shower-head
+    optimistic: true
+  - platform: template
+    name: "Pump Running sensor Sim"
+    id: pump_running
+    optimistic: true
+  - platform: template
+    name: "Compressor Running sensor Sim"
+    id: compressor_running
+    icon: mdi:car-turbocharger
+    optimistic: true
+  - platform: template
+    name: "Defrosting sensor Sim"
+    id: defrosting
+    optimistic: true
+  - platform: template
+    name: "SWW Heating sensor Sim"
+    id: sww_heating
+    icon: mdi:shower-head
+    optimistic: true
+  - platform: template
+    name: "Silent Mode state sensor Sim"
+    id: silent_mode_state
+    icon: mdi:volume-off
+    optimistic: true
+
+sensor:
+  - platform: template
+    name: "Doeltemperatuur Sim"
+    id: doel_temp
+    unit_of_measurement: "°C"
+    accuracy_decimals: 0
+    filters:
+      - multiply: 0.1
+    icon: mdi:home-thermometer-outline
+  - platform: template
+    name: "Flow Rate Sim"
+    id: current_flow_rate
+    unit_of_measurement: "L/m"
+    accuracy_decimals: 1
+    icon: mdi:waves-arrow-right
+
+number:
+  - platform: template
+    id: water_temp_target_output
+    name: "Water Temp Target Output Sim"
+    step: 1
+    min_value: 20
+    max_value: 50
+    initial_value: 20
+    optimistic: true
+  - platform: template
+    name: "Water retour Sim"
+    id: water_temp_retour
+    min_value: 20
+    max_value: 50
+    initial_value: 20
+    step: 1
+    unit_of_measurement: "°C"
+    icon: mdi:thermometer-chevron-down
+    optimistic: true
+  - platform: template
+    name: "Water aanvoer Sim"
+    id: water_temp_aanvoer
+    min_value: 20
+    max_value: 50
+    initial_value: 20
+    step: 1
+    unit_of_measurement: "°C"
+    icon: mdi:thermometer-chevron-up
+    optimistic: true
+  - platform: template
+    name: "Buitentemperatuur Sim"
+    id: buiten_temp
+    min_value: -10
+    max_value: 25
+    initial_value: 10
+    step: 0.1
+    unit_of_measurement: "°C"
+    optimistic: true
+    icon: mdi:weather-cloudy
+  - platform: template
+    name: "WP Sensed Power Sim"
+    id: wp_sensed_power
+    min_value: 100
+    max_value: 4000
+    initial_value: 100
+    step: 500
+    unit_of_measurement: "W"
+    icon: mdi:meter-electric-outline
+    optimistic: true
+  - platform: template
+    name: "Compressor RPM Sim"
+    id: compressor_rpm
+    min_value: 0
+    max_value: 100
+    initial_value: 0
+    step: 1
+    unit_of_measurement: "RPM"
+    icon: mdi:car-turbocharger
+    optimistic: true

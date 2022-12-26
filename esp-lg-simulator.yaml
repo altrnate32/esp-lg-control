@@ -1,5 +1,5 @@
 substitutions:
-  device_name: esp-wp-control
+  device_name: esp-lg-simulator
 
 esphome:
   name: "${device_name}"
@@ -21,20 +21,15 @@ esphome:
           id(controller_state).publish_state("Initialiseren");
           
 packages:
-  config_values: !include lg-heatpump-control/config/config.yaml
-  lg_modbus: !include lg-heatpump-control/sensors/lg-heatpump-modbus.yaml #include file with modbus sensors
-  lg_dallas_temp: !include lg-heatpump-control/sensors/lg-dallas-temp.yaml #optional file with dallas temp probes (disable if not used)
-
+  config_values: !include lg-heatpump-control/config/config_simulator.yaml
+  lg_modbus: !include lg-heatpump-control/sim/lg-fake-modbus.yaml #include file with simulated modbus sensors
+  
 # Enable logging. Disable modbus controller debug messages
 logger:
   logs:
-    modbus_controller.sensor: WARN
-    modbus_controller.output: WARN
-    modbus.number: WARN
     esp32.preferences: WARN
     sensor: WARN
     text_sensor: WARN
-    dallas.sensor: WARN #disable if dallas is not used
     number: WARN
 
 globals:
@@ -49,7 +44,7 @@ globals:
 
 number:
   - platform: template
-    name: "Stooklijn offset"
+    name: "Stooklijn offset Sim"
     id: wp_stooklijn_offset
     min_value: -5
     max_value: 5
@@ -65,7 +60,7 @@ number:
             id(update_stooklijn) = true;
   - platform: template
     id: stooklijn_curve
-    name: "Stooklijn Curve"
+    name: "Stooklijn Curve Sim"
     min_value: -6
     max_value: 6
     step: 0.5
@@ -79,7 +74,7 @@ number:
             id(update_stooklijn) = true;
   - platform: template
     id: stooklijn_min_oat
-    name: "Stooklijn Minimum Buitentemperatuur"
+    name: "Stooklijn Minimum Buitentemperatuur Sim"
     min_value: -25
     max_value: 0
     step: 1
@@ -94,7 +89,7 @@ number:
             id(update_stooklijn) = true;
   - platform: template
     id: stooklijn_max_wtemp
-    name: "Stooklijn Maximum Watertemperatuur"
+    name: "Stooklijn Maximum Watertemperatuur Sim"
     min_value: 20
     max_value: 60
     step: 1
@@ -109,7 +104,7 @@ number:
             id(update_stooklijn) = true;
   - platform: template
     id: stooklijn_min_wtemp
-    name: "Stooklijn Minimum Watertemperatuur"
+    name: "Stooklijn Minimum Watertemperatuur Sim"
     min_value: 20
     max_value: 40
     step: 1
@@ -124,7 +119,7 @@ number:
             id(update_stooklijn) = true;
   - platform: template
     id: minimum_run_time
-    name: "Minimale run tijd"
+    name: "Minimale run tijd Sim"
     min_value: 0
     max_value: 60
     step: 1
@@ -135,7 +130,7 @@ number:
     icon: mdi:timer-sync-outline
   - platform: template
     id: external_pump_runover
-    name: "External pump overrun"
+    name: "External pump overrun Sim"
     min_value: 0
     max_value: 60
     step: 1
@@ -146,7 +141,7 @@ number:
     icon: mdi:timer-cog-outline
   - platform: template
     id: oat_silent_always_off
-    name: "Buitentemperatuur silent always off"
+    name: "Buitentemperatuur silent always off Sim"
     min_value: -20
     max_value: 10
     step: 1
@@ -157,7 +152,7 @@ number:
     icon: mdi:volume-plus
   - platform: template
     id: oat_silent_always_on
-    name: "Buitentemperatuur silent always on"
+    name: "Buitentemperatuur silent always on Sim"
     min_value: -20
     max_value: 20
     step: 1
@@ -168,7 +163,7 @@ number:
     icon: mdi:volume-off
   - platform: template
     id: thermostat_off_delay
-    name: "Thermostat off delay"
+    name: "Thermostat off delay Sim"
     min_value: 0
     max_value: 10
     step: 1
@@ -179,7 +174,7 @@ number:
     icon: mdi:timer-off-outline
   - platform: template
     id: thermostat_on_delay
-    name: "Thermostat on delay"
+    name: "Thermostat on delay Sim"
     min_value: 0
     max_value: 10
     step: 1
@@ -190,7 +185,7 @@ number:
     icon: mdi:timer
   - platform: template
     id: boost_time
-    name: "Boost duration"
+    name: "Boost duration Sim"
     min_value: 0
     max_value: 180
     step: 1
@@ -201,7 +196,7 @@ number:
     icon: mdi:timer-plus-outline
   - platform: template
     id: backup_heater_active_temp
-    name: "Buitentemperatuur backup heater active"
+    name: "Buitentemperatuur backup heater active Sim"
     min_value: -30
     max_value: 20
     step: 1
@@ -211,53 +206,27 @@ number:
     icon: mdi:gas-burner
 
 switch:
-#  - platform: template
-#    name: "Termostat On"
-#    id: thermostat_signal
-#    optimistic: true
-  - platform: gpio
-    name: "WP External Pump"
-    pin: 18
-    id: relay_pump
-    restore_mode: RESTORE_DEFAULT_OFF
-    inverted: true
-    icon: mdi:pump
-#  - platform: template
-#    name: "Dummy external pump relay"
-#    id: "relay_pump"
-#    optimistic: true
-  - platform: gpio
-    name: "WP Heat"
-    pin: 19
-    id: relay_heat
-    restore_mode: RESTORE_DEFAULT_OFF
-    inverted: true
-    icon: mdi:power
-#  - platform: template
-#    name: "Dummy heat relay"
-#    id: "relay_heat"
-#    optimistic: true
-  - platform: gpio
-    name: "WP Backup Heater"
-    pin: 21
-    id: relay_backup_heat
-    restore_mode: ALWAYS_OFF
-    inverted: true
-    icon: mdi:gas-burner
-#  - platform: template
-#    name: "Dummy backup_heat relay"
-#    id: "relay_backup_heat"
-#    optimistic: true
-  - platform: gpio
-    name: "Relay 4"
-    pin: 22
-    id: relay_4
-    restore_mode: ALWAYS_OFF
-    inverted: true
-  - platform: restart
-    name: "ESP WP Control Restart"
   - platform: template
-    name: "Temperature Boost"
+    name: "Termostat On Sim"
+    id: thermostat_signal
+    optimistic: true
+  - platform: template
+    name: "External pump relay Sim"
+    id: "relay_pump"
+    optimistic: true
+  - platform: template
+    name: "Heat relay  Sim"
+    id: "relay_heat"
+    optimistic: true
+  - platform: template
+    name: "Backup_heat relay Sim"
+    id: "relay_backup_heat"
+    optimistic: true
+    icon: mdi:gas-burner
+  - platform: restart
+    name: "ESP WP Control Restart  Sim"
+  - platform: template
+    name: "Temperature Boost Sim"
     id: boost_switch
     lambda: |-
         return id(boost_bool);
@@ -272,24 +241,16 @@ switch:
     icon: mdi:thermometer-plus
 
 interval:
-  - interval: 30s
+  - interval: 10s
     id: state_machine
     then: !include { file: lg-heatpump-control/lg-heatpump-state-machine.yaml }
+  - interval: 20s
+    id: simulation
+    then: !include { file: lg-heatpump-control/sim/lg-heatpump-simulation-script.yaml }
 
 binary_sensor:
-  - platform: gpio # Thermostat input signal is connected to this input pin
-    pin:
-      number: GPIO27
-      mode:
-        input: true
-        pullup: false
-    name: "WP Nest Signal"
-    id: thermostat_signal
-    filters:
-      - delayed_on: 500ms # Debounce
-    icon: mdi:thermostat
   - platform: template
-    name: "Boost mode active"
+    name: "Boost mode active  Sim"
     id: boost_active
     lambda: |-
         return id(boost_bool);
@@ -297,7 +258,7 @@ binary_sensor:
 
 sensor:
   - platform: template
-    name: "Stooklijn Watertemp Target"
+    name: "Stooklijn Watertemp Target Sim"
     id: watertemp_target
     unit_of_measurement: "°C"
     update_interval: never
@@ -314,19 +275,16 @@ sensor:
     filters:
       - multiply: 0.000011574
   - platform: template
-    name: "Delta T"
+    name: "Delta T Sim"
     id: wp_delta_t
     unit_of_measurement: "°C"
     accuracy_decimals: 1
     lambda: |-
-      //The +0.6 and -0.2 is a correction factor due to innacurate readings. Adapt this to your situation
-      //I do not correct it at the sensor, as the pump uses the uncorrected value for target setting, modulation etc
-      //Messing with this value at the sensor will mess up te script
-      return (float)((id(water_temp_aanvoer).state+0.6)-(id(water_temp_retour).state-0.2)); 
+        return (float)((id(water_temp_aanvoer).state)-(id(water_temp_retour).state)); 
     update_interval: 30s
     icon: mdi:delta
   - platform: template
-    name: "Derivative"
+    name: "Derivative Sim"
     id: derivative_value
     accuracy_decimals: 1
     unit_of_measurement: "°C/h" 
@@ -334,7 +292,7 @@ sensor:
     icon: mdi:sigma
   #very innacurate, use only for global reference
   - platform: template
-    name: "COP guess"
+    name: "COP guess Sim"
     id: cop_guess
     lambda: |-
       if(id(current_flow_rate).state < 6 || id(wp_delta_t).state <= 0) return 0;
@@ -346,7 +304,7 @@ sensor:
     update_interval: 60 sec
     icon: mdi:approximately-equal
   - platform: template
-    name: "Average cop"
+    name: "Average cop Sim"
     id: average_cop_sensor
     accuracy_decimals: 1
     unit_of_measurement: "COP" 
@@ -364,12 +322,12 @@ text_sensor:
       name: "${device_name} ssid"
       icon: mdi:wifi-marker
   - platform: template
-    name: "Controller state"
+    name: "Controller state Sim"
     id: controller_state
     update_interval: never
     icon: mdi:state-machine
   - platform: template
-    name: "Controller info"
+    name: "Controller info Sim"
     id: controller_info
     update_interval: never
     icon: mdi:memory
