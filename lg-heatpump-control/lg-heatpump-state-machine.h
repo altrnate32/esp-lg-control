@@ -277,16 +277,18 @@
     }
     float new_stooklijn_target;
     //OAT expects start temp to be OAT 20 with Watertemp 20. Steepness is defined bij Z, calculated by the max wTemp at minOat
-    //Formula is wTemp = ((Z x (20 - OAT)) + 20) + C 
-    //Formula to calculate Z = 0-((stooklijn_max_wtemp-20)) / (stooklijn_min_oat - stooklijn_start_temp))
-    //C is the curvature of the stooklijn defined by C = (stooklijn_curve*0.001)*(oat-20)^2
+    //Formula is wTemp = ((Z x (stooklijn_max_oat - OAT)) + stooklijn_min_wtemp) + C 
+    //Formula to calculate Z = 0-((stooklijn_max_wtemp-stooklijn_min_wtemp)) / (stooklijn_min_oat - stooklijn_max_oat))
+    //C is the curvature of the stooklijn defined by C = (stooklijn_curve*0.001)*(oat-max_oat)^2
     //This will add a positive offset with decreasing offset. You can set this to zero if you don't need it and want a linear stooklijn
     //I need it in my installation as the stooklijn is spot on at relative high temperatures, but too low at lower temps
-    const float Z =  0 - (float)( (id(stooklijn_max_wtemp).state-20)/(id(stooklijn_min_oat).state - 20));
-    //If oat below minimum oat, clamp to minimum value
-    clamp(input[OAT]->value,id(stooklijn_min_oat).state,(float)20.0);
-    float C = (id(stooklijn_curve).state*0.001)*pow((input[OAT]->value-20),2);
-    new_stooklijn_target = (int)round( (Z * (20-input[OAT]->value))+20+C);
+    const float Z =  0 - (float)( (id(stooklijn_max_wtemp).state-id(stooklijn_min_wtemp).state)/(id(stooklijn_min_oat).state - id(stooklijn_max_oat).state));
+    //If oat above or below maximum/minimum oat, clamp to stooklijn_max/min value
+    float oat_value = input[OAT]->value;
+    if(oat_value > id(stooklijn_max_oat).state) oat_value = id(stooklijn_max_oat).state;
+    else if(oat_value < id(stooklijn_min_oat).state) oat_value = id(stooklijn_min_oat).state;
+    float C = (id(stooklijn_curve).state*0.001)*pow((oat_value-id(stooklijn_max_oat).state),2);
+    new_stooklijn_target = (int)round( (Z * (id(stooklijn_max_oat).state-oat_value)) + id(stooklijn_min_wtemp).state + C);
     //Add stooklijn offset
     new_stooklijn_target = new_stooklijn_target + id(wp_stooklijn_offset).state;
     //Add boost offset

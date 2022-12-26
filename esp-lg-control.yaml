@@ -70,7 +70,7 @@ number:
     max_value: 6
     step: 0.5
     restore_value: yes
-    initial_value: -3
+    initial_value: 1
     optimistic: true
     icon: mdi:chart-bell-curve-cumulative
     set_action:
@@ -84,7 +84,7 @@ number:
     max_value: 0
     step: 1
     restore_value: yes
-    initial_value: -10
+    initial_value: -8
     unit_of_measurement: "°C"
     optimistic: true
     icon: mdi:download-circle-outline
@@ -99,7 +99,7 @@ number:
     max_value: 60
     step: 1
     restore_value: yes
-    initial_value: 46
+    initial_value: 45
     unit_of_measurement: "°C"
     optimistic: true
     icon: mdi:waves-arrow-right
@@ -109,12 +109,27 @@ number:
             id(update_stooklijn) = true;
   - platform: template
     id: stooklijn_min_wtemp
-    name: "Stooklijn Minimum Watertemperatuur"
+    name: "Stooklijn Minimum Watertemperatuur Sim"
     min_value: 20
     max_value: 40
     step: 1
     restore_value: yes
-    initial_value: 28
+    initial_value: 27
+    unit_of_measurement: "°C"
+    optimistic: true
+    icon: mdi:waves-arrow-left
+    set_action:
+      then:
+        lambda: !lambda |-
+            id(update_stooklijn) = true;
+  - platform: template
+    id: stooklijn_max_oat
+    name: "Stooklijn Start Buitentemperatuur Sim"
+    min_value: 0
+    max_value: 20
+    step: 1
+    restore_value: yes
+    initial_value: 11
     unit_of_measurement: "°C"
     optimistic: true
     icon: mdi:waves-arrow-left
