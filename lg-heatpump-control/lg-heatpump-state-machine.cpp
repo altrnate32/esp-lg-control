@@ -19,8 +19,6 @@
     prev_state = state;
     prev_value = value;
   }
- 
-  
   state_machine_class::state_machine_class(){
     //initialize the list with inputs
     input[THERMOSTAT] = new input_struct(&run_time_value);
