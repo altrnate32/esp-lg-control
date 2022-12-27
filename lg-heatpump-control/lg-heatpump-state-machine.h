@@ -521,7 +521,7 @@
 
     if(input[OAT]->value >= id(oat_silent_always_on).state) {
       if(!input[SILENT_MODE]->state){
-        ESP_LOGD(state_name(),"oat > oat_silent_always_off and silent mode off, switching silent mode on");
+        ESP_LOGD(state_name(),"oat > oat_silent_always_on and silent mode off, switching silent mode on");
         id(controller_info).publish_state("Switching Silent mode on oat > on");
         silent_mode(true);
       }
@@ -533,15 +533,15 @@
       }
     } else {
       if(input[BOOST]->state || state() == STALL) {
-        if (input[SILENT_MODE]->state){
+        if(input[SILENT_MODE]->state){
           ESP_LOGD(state_name(),"OAT between silent mode brackets. Boost or stall silent mode off");
           id(controller_info).publish_state("STALL/Boost switching silent mode off");
           silent_mode(false);
-        } else {
-          ESP_LOGD(state_name(),"OAT between silent mode brackets. No boost/stall switching silent off");
-          id(controller_info).publish_state("Switching silent mode off oat in between");
-          silent_mode(false);
         }
+      } else if(!input[SILENT_MODE]->state){
+        ESP_LOGD(state_name(),"OAT between silent mode brackets. No boost/stall switching silent on");
+        id(controller_info).publish_state("Switching silent mode on oat in between");
+        silent_mode(true);
       }
     }
   }
