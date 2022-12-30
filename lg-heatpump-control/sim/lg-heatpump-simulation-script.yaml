@@ -2,6 +2,7 @@ lambda: !lambda |-
     static uint_fast32_t run_time_number = 0;
     if(run_time_number == 0){
       srand(time(0));
+      id(doel_temp).publish_state(280);
     }
     run_time_number++;
     
@@ -17,7 +18,7 @@ lambda: !lambda |-
     const static int system_water_quantity = 220; //in liters
     float compressor_max = 100;
     if(id(silent_mode_state).state) compressor_max = 56;
-    float delta = (id(water_temp_aanvoer).state - id(doel_temp).state);
+    float delta = (id(water_temp_aanvoer).state - fsm.input[STOOKLIJN_TARGET]->value);
     static bool compressor_change_run = false;
     static float compressor_target = 0;
 
@@ -43,7 +44,7 @@ lambda: !lambda |-
       id(compressor_rpm).publish_state(0);
       id(current_flow_rate).publish_state(0);
       id(pump_running).publish_state(false);
-      run_time_number = 0;
+      run_time_number = 1;
     } else if(!id(defrosting).state && !id(sww_heating).state){
       if(!id(pump_running).state) id(pump_running).publish_state(true);
       if(id(current_flow_rate).state != flow_rate) id(current_flow_rate).publish_state(flow_rate);
@@ -65,7 +66,7 @@ lambda: !lambda |-
       } else if(delta < 2){
         id(compressor_running).publish_state(true);
         id(compressor_rpm).publish_state(21);
-        run_time_number = 0;
+        run_time_number = 1;
         compressor_change_run = true;
         compressor_target = compressor_max;
       }

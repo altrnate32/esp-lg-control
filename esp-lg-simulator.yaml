@@ -32,16 +32,6 @@ logger:
     text_sensor: WARN
     number: WARN
 
-globals:
-  - id: update_stooklijn
-    type: bool
-    restore_value: no
-    initial_value: 'true'
-  - id: boost_bool
-    type: bool
-    restore_value: no
-    initial_value: 'false'
-
 number:
   - platform: template
     name: "Stooklijn offset Sim"
@@ -57,7 +47,7 @@ number:
     set_action:
       then:
         lambda: !lambda |-
-            id(update_stooklijn) = true;
+            fsm.update_stooklijn();
   - platform: template
     id: stooklijn_curve
     name: "Stooklijn Curve Sim"
@@ -71,7 +61,7 @@ number:
     set_action:
       then:
         lambda: !lambda |-
-            id(update_stooklijn) = true;
+            fsm.update_stooklijn();
   - platform: template
     id: stooklijn_min_oat
     name: "Stooklijn Minimum Buitentemperatuur Sim"
@@ -86,7 +76,7 @@ number:
     set_action:
       then:
         lambda: !lambda |-
-            id(update_stooklijn) = true;
+            fsm.update_stooklijn();
   - platform: template
     id: stooklijn_max_wtemp
     name: "Stooklijn Maximum Watertemperatuur Sim"
@@ -101,7 +91,7 @@ number:
     set_action:
       then:
         lambda: !lambda |-
-            id(update_stooklijn) = true;
+            fsm.update_stooklijn();
   - platform: template
     id: stooklijn_min_wtemp
     name: "Stooklijn Minimum Watertemperatuur Sim"
@@ -116,7 +106,7 @@ number:
     set_action:
       then:
         lambda: !lambda |-
-            id(update_stooklijn) = true;
+            fsm.update_stooklijn();
   - platform: template
     id: stooklijn_max_oat
     name: "Stooklijn Start Buitentemperatuur Sim"
@@ -131,7 +121,7 @@ number:
     set_action:
       then:
         lambda: !lambda |-
-            id(update_stooklijn) = true;
+            fsm.update_stooklijn();
   - platform: template
     id: minimum_run_time
     name: "Minimale run tijd Sim"
@@ -243,16 +233,7 @@ switch:
   - platform: template
     name: "Temperature Boost Sim"
     id: boost_switch
-    lambda: |-
-        return id(boost_bool);
-    turn_on_action:
-      - globals.set:
-          id: boost_bool
-          value: 'true'
-    turn_off_action:
-      - globals.set:
-          id: boost_bool
-          value: 'false'
+    optimistic: true
     icon: mdi:thermometer-plus
 
 interval:
@@ -262,14 +243,6 @@ interval:
   - interval: 20s
     id: simulation
     then: !include { file: lg-heatpump-control/sim/lg-heatpump-simulation-script.yaml }
-
-binary_sensor:
-  - platform: template
-    name: "Boost mode active  Sim"
-    id: boost_active
-    lambda: |-
-        return id(boost_bool);
-    icon: mdi:thermometer-plus
 
 sensor:
   - platform: template

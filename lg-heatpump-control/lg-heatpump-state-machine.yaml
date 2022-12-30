@@ -14,8 +14,6 @@ lambda: !lambda |-
     //DEFROST: HP operating defrost cycle
     //AFTERRUN: Run done (no more heating request) external pump runs
     
-    //main state machine object
-    static state_machine_class fsm; //state machine main object
     static uint_fast32_t dt = 30; //round(id(state_machine).get_update_interval()/1000); //update interval in seconds
     fsm.increment_run_time(dt); //increment fsm run_time
     

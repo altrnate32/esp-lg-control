@@ -29,6 +29,7 @@
         std::vector<float> cop_vector; //vector of floats to integrate cop
         float average_cop = 0; //keep track off average cop during last 15 minutes
         bool backup_heat_cop_limit_trigger = false; //if backup heat triggered due to low cop?
+        bool update_stooklijn_bool = true;
       public:
         input_struct* input[16]; //list of all inputs
         bool entry_done = false;
@@ -47,6 +48,7 @@
         float pred_5_delta_5 = 0; //predicted delta in 5 minutes based on last 5 minute derivative
         state_machine_class();
         ~ state_machine_class();
+        void update_stooklijn();
         states state();
         states get_prev_state();
         states get_next_state();
@@ -141,6 +143,9 @@
     delete input[SILENT_MODE];
     delete input[EMERGENCY];
   }
+  void state_machine_class::update_stooklijn(){
+    update_stooklijn_bool = true;
+  }
   states state_machine_class::state(){
     return current_state;
   }
@@ -200,7 +205,7 @@
     input[SWW_RUN]->receive_state(id(sww_heating).state); //is the domestic hot water run active
     input[DEFROST_RUN]->receive_state(id(defrosting).state); //is defrost active
     input[OAT]->receive_value(round(id(buiten_temp).state)); //outside air temperature
-    if(input[OAT]->has_flag() || id(update_stooklijn)) input[STOOKLIJN_TARGET]->receive_value(calculate_stooklijn()); //stooklijn target
+    if(input[OAT]->has_flag() || update_stooklijn_bool) input[STOOKLIJN_TARGET]->receive_value(calculate_stooklijn()); //stooklijn target
     //Set to value that anti-pendel script will track (outlet/inlet) (recommend inlet)
     input[TRACKING_VALUE]->receive_value(floor(id(water_temp_aanvoer).state));
     input[BOOST]->receive_state(id(boost_switch).state);
@@ -273,7 +278,7 @@
       ESP_LOGD("calculate_stooklijn", "Invalid OAT (%f) waiting for next run", input[OAT]->value);
     }  else {
       prev_oat = input[OAT]->value;
-      id(update_stooklijn) = false;
+      update_stooklijn_bool = false;
     }
     float new_stooklijn_target;
     //OAT expects start temp to be OAT 20 with Watertemp 20. Steepness is defined bij Z, calculated by the max wTemp at minOat
@@ -485,12 +490,10 @@
   }
   void state_machine_class::toggle_boost(){
     if(input[BOOST]->state){
-      id(boost_active).publish_state(true);
       current_boost_offset = boost_offset;
       input[STOOKLIJN_TARGET]->receive_value(calculate_stooklijn());
       id(controller_info).publish_state("Boost mode active");
     } else {
-      id(boost_active).publish_state(false);
       current_boost_offset = 0;
       input[STOOKLIJN_TARGET]->receive_value(calculate_stooklijn());
       id(controller_info).publish_state("Boost mode deactivated");
@@ -655,3 +658,6 @@
     ESP_LOGD("set_target_temp", "Modbus target set to: %f", round(target));
     id(doel_temp).publish_state(target*10);
   }
+  
+  //main state machine object
+  static state_machine_class fsm; //state machine main object

@@ -37,16 +37,6 @@ logger:
     dallas.sensor: WARN #disable if dallas is not used
     number: WARN
 
-globals:
-  - id: update_stooklijn
-    type: bool
-    restore_value: no
-    initial_value: 'true'
-  - id: boost_bool
-    type: bool
-    restore_value: no
-    initial_value: 'false'
-
 number:
   - platform: template
     name: "Stooklijn offset"
@@ -62,7 +52,7 @@ number:
     set_action:
       then:
         lambda: !lambda |-
-            id(update_stooklijn) = true;
+            fsm.update_stooklijn();
   - platform: template
     id: stooklijn_curve
     name: "Stooklijn Curve"
@@ -70,13 +60,13 @@ number:
     max_value: 6
     step: 0.5
     restore_value: yes
-    initial_value: 1
+    initial_value: 0
     optimistic: true
     icon: mdi:chart-bell-curve-cumulative
     set_action:
       then:
         lambda: !lambda |-
-            id(update_stooklijn) = true;
+            fsm.update_stooklijn();
   - platform: template
     id: stooklijn_min_oat
     name: "Stooklijn Minimum Buitentemperatuur"
@@ -84,14 +74,14 @@ number:
     max_value: 0
     step: 1
     restore_value: yes
-    initial_value: -8
+    initial_value: -7
     unit_of_measurement: "°C"
     optimistic: true
     icon: mdi:download-circle-outline
     set_action:
       then:
         lambda: !lambda |-
-            id(update_stooklijn) = true;
+            fsm.update_stooklijn();
   - platform: template
     id: stooklijn_max_wtemp
     name: "Stooklijn Maximum Watertemperatuur"
@@ -106,25 +96,25 @@ number:
     set_action:
       then:
         lambda: !lambda |-
-            id(update_stooklijn) = true;
+            fsm.update_stooklijn();
   - platform: template
     id: stooklijn_min_wtemp
-    name: "Stooklijn Minimum Watertemperatuur Sim"
+    name: "Stooklijn Minimum Watertemperatuur"
     min_value: 20
     max_value: 40
     step: 1
     restore_value: yes
-    initial_value: 27
+    initial_value: 28
     unit_of_measurement: "°C"
     optimistic: true
     icon: mdi:waves-arrow-left
     set_action:
       then:
         lambda: !lambda |-
-            id(update_stooklijn) = true;
+            fsm.update_stooklijn();
   - platform: template
     id: stooklijn_max_oat
-    name: "Stooklijn Start Buitentemperatuur Sim"
+    name: "Stooklijn Start Buitentemperatuur"
     min_value: 0
     max_value: 20
     step: 1
@@ -136,7 +126,7 @@ number:
     set_action:
       then:
         lambda: !lambda |-
-            id(update_stooklijn) = true;
+            fsm.update_stooklijn();
   - platform: template
     id: minimum_run_time
     name: "Minimale run tijd"
@@ -274,16 +264,7 @@ switch:
   - platform: template
     name: "Temperature Boost"
     id: boost_switch
-    lambda: |-
-        return id(boost_bool);
-    turn_on_action:
-      - globals.set:
-          id: boost_bool
-          value: 'true'
-    turn_off_action:
-      - globals.set:
-          id: boost_bool
-          value: 'false'
+    optimistic: true
     icon: mdi:thermometer-plus
 
 interval:
@@ -303,12 +284,6 @@ binary_sensor:
     filters:
       - delayed_on: 500ms # Debounce
     icon: mdi:thermostat
-  - platform: template
-    name: "Boost mode active"
-    id: boost_active
-    lambda: |-
-        return id(boost_bool);
-    icon: mdi:thermometer-plus
 
 sensor:
   - platform: template

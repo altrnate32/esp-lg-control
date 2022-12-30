@@ -170,7 +170,7 @@ sensor:
         - lambda: !lambda |-
             static float prev_oat = -100.0;
             if (abs(round(x) - round(prev_oat)) > 0.1) {
-              id(update_stooklijn) = true;
+              fsm.update_stooklijn();
               prev_oat = x;
             }
   - platform: modbus_controller
