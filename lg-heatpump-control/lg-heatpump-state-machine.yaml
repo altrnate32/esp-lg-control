@@ -328,13 +328,21 @@ lambda: !lambda |-
           fsm.state_transition(RUN);
           break;
         }
-        //always give it at least 10 minutes
+        
+        //2: check if below stooklijn target, with delta > 0 and modulating
+        // (usually target change (boost) or after start). No minimum waiting time
+        if(fsm.input[TEMP_NEW_TARGET]->value < fsm.input[STOOKLIJN_TARGET]->value && fsm.delta > 0 && fsm.compressor_modulation()){
+          fsm.input[TEMP_NEW_TARGET]->receive_value(fsm.input[STOOKLIJN_TARGET]->value); 
+          break;
+        }
+        
+        //otherwise always at least 10 minutes waiting time
         if(fsm.input[TEMP_NEW_TARGET]->seconds_since_change() < (10*60)) {
           ESP_LOGD(fsm.state_name(), "Stall is waiting for effect of previous target change");
           break;
         }
 
-        //2: check if operating below stooklijn_target and fix it
+        //3: check if operating below stooklijn_target and fix it
         if(fsm.input[TEMP_NEW_TARGET]->value < fsm.input[STOOKLIJN_TARGET]->value){
           //is it bad?
           if((fsm.delta + (fsm.derivative_D_5*30)) < 0){
@@ -350,14 +358,14 @@ lambda: !lambda |-
           ESP_LOGD(fsm.state_name(), "Operating below target, raising target, pendel_target: %f",fsm.input[TEMP_NEW_TARGET]->value);
           break;
         }
-        //3: We are operating at target, are we modulating?
+        //4: We are operating at target, are we modulating?
         if(fsm.compressor_modulation() && fsm.input[TEMP_NEW_TARGET]->value < fsm.input[STOOKLIJN_TARGET]->value+3){
           //raise target above stooklijn target to stop modulation
           fsm.input[TEMP_NEW_TARGET]->receive_value(min(fsm.input[STOOKLIJN_TARGET]->value+3,fsm.input[TRACKING_VALUE]->value + 3));
           ESP_LOGD(fsm.state_name(), "Modulating, raising target, pendel_target: %f",fsm.input[TEMP_NEW_TARGET]->value);
           break;
         }
-        //4 We are above target and with no modulation, so those tricks are gone. How bad is it?
+        //5 We are above target and with no modulation, so those tricks are gone. How bad is it?
         if((fsm.delta + (fsm.derivative_D_5*30)) < 0){
           //it will still not be fixed next 30 minutes
           if(fsm.input[OAT]->value < id(backup_heater_active_temp).state && !id(relay_backup_heat).state){
