@@ -1,0 +1,13 @@
+switch:
+  - platform: template
+    name: "Dummy external pump relay"
+    id: "relay_pump"
+    optimistic: true
+  - platform: template
+    name: "Dummy heat relay"
+    id: "relay_heat"
+    optimistic: true
+  - platform: template
+    name: "Dummy backup_heat relay"
+    id: "relay_backup_heat"
+    optimistic: true

@@ -1,6 +1,23 @@
 substitutions:
   device_name: esp-wp-control
 
+packages:
+  config_values: !include lg-heatpump-control/config/config.yaml
+  lg_modbus: !include lg-heatpump-control/sensors/lg-heatpump-modbus.yaml #include file with modbus sensors
+  lg_dallas_temp: !include lg-heatpump-control/sensors/lg-dallas-temp.yaml #optional file with dallas temp probes (disable if not used)
+  
+  #Choose correct version of below two files. Always enable (by uncommenting) only one of the two
+  #*****
+  with_external_thermostat: !include lg-heatpump-control/sensors/lg-with-external-thermostat.yaml #use external thermostat connected to GPIO pin 
+  #without_external_thermostat: !include lg-heatpump-control/sensors/lg-without-external-thermostat.yaml #Replace external thermostat by an on/off switch
+  #*****
+  
+  #Again Choose correct version of below two files. Always enable (by uncommenting) only one of the two
+  #*****
+  with_external_relays: !include lg-heatpump-control/sensors/lg-with-external-relays.yaml #use external thermostat connected to GPIO pin 
+  #without_external_relays: !include lg-heatpump-control/sensors/lg-without-external-relays.yaml #Replace external thermostat by an on/off switch
+  #*****
+
 esphome:
   name: "${device_name}"
   includes:
@@ -19,11 +36,6 @@ esphome:
             id(relay_heat).turn_off();
           }
           id(controller_state).publish_state("Initialiseren");
-          
-packages:
-  config_values: !include lg-heatpump-control/config/config.yaml
-  lg_modbus: !include lg-heatpump-control/sensors/lg-heatpump-modbus.yaml #include file with modbus sensors
-  lg_dallas_temp: !include lg-heatpump-control/sensors/lg-dallas-temp.yaml #optional file with dallas temp probes (disable if not used)
 
 # Enable logging. Disable modbus controller debug messages
 logger:
@@ -216,49 +228,6 @@ number:
     icon: mdi:gas-burner
 
 switch:
-#  - platform: template
-#    name: "Termostat On"
-#    id: thermostat_signal
-#    optimistic: true
-  - platform: gpio
-    name: "WP External Pump"
-    pin: 18
-    id: relay_pump
-    restore_mode: RESTORE_DEFAULT_OFF
-    inverted: true
-    icon: mdi:pump
-#  - platform: template
-#    name: "Dummy external pump relay"
-#    id: "relay_pump"
-#    optimistic: true
-  - platform: gpio
-    name: "WP Heat"
-    pin: 19
-    id: relay_heat
-    restore_mode: RESTORE_DEFAULT_OFF
-    inverted: true
-    icon: mdi:power
-#  - platform: template
-#    name: "Dummy heat relay"
-#    id: "relay_heat"
-#    optimistic: true
-  - platform: gpio
-    name: "WP Backup Heater"
-    pin: 21
-    id: relay_backup_heat
-    restore_mode: ALWAYS_OFF
-    inverted: true
-    icon: mdi:gas-burner
-#  - platform: template
-#    name: "Dummy backup_heat relay"
-#    id: "relay_backup_heat"
-#    optimistic: true
-  - platform: gpio
-    name: "Relay 4"
-    pin: 22
-    id: relay_4
-    restore_mode: ALWAYS_OFF
-    inverted: true
   - platform: restart
     name: "ESP WP Control Restart"
   - platform: template
@@ -271,19 +240,6 @@ interval:
   - interval: 30s
     id: state_machine
     then: !include { file: lg-heatpump-control/lg-heatpump-state-machine.yaml }
-
-binary_sensor:
-  - platform: gpio # Thermostat input signal is connected to this input pin
-    pin:
-      number: GPIO27
-      mode:
-        input: true
-        pullup: false
-    name: "WP Nest Signal"
-    id: thermostat_signal
-    filters:
-      - delayed_on: 500ms # Debounce
-    icon: mdi:thermostat
 
 sensor:
   - platform: template

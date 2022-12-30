@@ -1,0 +1,28 @@
+switch:
+  - platform: gpio
+    name: "WP External Pump"
+    pin: 18
+    id: relay_pump
+    restore_mode: RESTORE_DEFAULT_OFF
+    inverted: true
+    icon: mdi:pump
+  - platform: gpio
+    name: "WP Heat"
+    pin: 19
+    id: relay_heat
+    restore_mode: RESTORE_DEFAULT_OFF
+    inverted: true
+    icon: mdi:power
+  - platform: gpio
+    name: "WP Backup Heater"
+    pin: 21
+    id: relay_backup_heat
+    restore_mode: ALWAYS_OFF
+    inverted: true
+    icon: mdi:gas-burner
+  - platform: gpio
+    name: "Relay 4"
+    pin: 22
+    id: relay_4
+    restore_mode: ALWAYS_OFF
+    inverted: true

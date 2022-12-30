@@ -1,0 +1,5 @@
+switch:
+  - platform: template
+    name: "Termostat On/Off"
+    id: thermostat_signal
+    optimistic: true

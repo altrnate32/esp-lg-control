@@ -23,7 +23,7 @@ esphome:
 packages:
   config_values: !include lg-heatpump-control/config/config_simulator.yaml
   lg_modbus: !include lg-heatpump-control/sim/lg-fake-modbus.yaml #include file with simulated modbus sensors
-  
+ 
 # Enable logging. Disable modbus controller debug messages
 logger:
   logs:
