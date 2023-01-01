@@ -1,5 +1,4 @@
 lambda: !lambda |-
-    
     //State machine, main algoritm that runs every 'clock' cycle
     //INIT: Initial startup (very early after boot)
     //IDLE: No heat request, wait for thermostat on
@@ -100,12 +99,19 @@ lambda: !lambda |-
         //SPECIAL: NONE
         if(!fsm.entry_done){
           fsm.entry_done = true;
-          //set target, with minimum of tracking value+2 to ensure compressor start
-          fsm.set_new_target(fsm.input[STOOKLIJN_TARGET]->value + fsm.get_target_offset());
-          ESP_LOGD(fsm.state_name(), "Run start initial target set; stooklijn_target: %f pendel_target: %f tracking_value: %f ",fsm.input[STOOKLIJN_TARGET]->value,fsm.input[TEMP_NEW_TARGET]->value,fsm.input[TRACKING_VALUE]->value);
-          fsm.set_run_start_time();
-          fsm.state_transition(STARTING);
+          fsm.external_pump(true); //external pump on
+          fsm.heat(true); //heat on (to start heatpump)
+          fsm.backup_heat(false);
         }
+        //two minutes delay to allow pump to run and values to stabilise 
+        if(fsm.seconds_since_state_start() < (2*60)) break;
+        //set target, with minimum of tracking value+2 to ensure compressor start
+        int new_target = fsm.input[STOOKLIJN_TARGET]->value + fsm.get_target_offset();
+        if(new_target < fsm.input[TRACKING_VALUE]->value + 2) new_target = fsm.input[TRACKING_VALUE]->value + 2;
+        fsm.set_new_target(new_target);
+        ESP_LOGD(fsm.state_name(), "Run start initial target set; stooklijn_target: %f pendel_target: %f tracking_value: %f ",fsm.input[STOOKLIJN_TARGET]->value,fsm.input[TEMP_NEW_TARGET]->value,fsm.input[TRACKING_VALUE]->value);
+        fsm.set_run_start_time();
+        fsm.state_transition(STARTING);
         //enforce config
         fsm.backup_heat(false);
         break;
@@ -119,13 +125,11 @@ lambda: !lambda |-
         //SPECIAL: none
         if(!fsm.entry_done){
           fsm.entry_done = true;
-          fsm.external_pump(true); //external pump on
-          fsm.heat(true); //heat on (to start heatpump)
         }
         //enforce allowed config
         fsm.backup_heat(false);
         fsm.boost(false);
-        
+
         fsm.start_events();
         fsm.add_event(SWW_RUN);
         fsm.add_event(DEFROST_RUN);
