@@ -204,15 +204,14 @@ sensor:
       - multiply: 0.1
   - platform: modbus_controller
     modbus_controller_id: lg
-    name: "Unknown Temp 19"
-    id: temp19
+    name: "Fan RPM"
+    id: fan_rpm
     register_type: read
     address: 19
-    unit_of_measurement: "°C"
+    unit_of_measurement: "RPM"
     value_type: S_WORD
-    accuracy_decimals: 1
-    filters:
-      - multiply: 0.1
+    accuracy_decimals: 0
+    icon: mdi:fan
   - platform: modbus_controller
     modbus_controller_id: lg
     name: "Condenser Temp"
@@ -248,11 +247,11 @@ sensor:
       - multiply: 0.01
   - platform: modbus_controller
     modbus_controller_id: lg
-    name: "Compressor RPM"
+    name: "Compressor Hz"
     id: compressor_rpm
     register_type: read
     address: 24
-    unit_of_measurement: "RPM"
+    unit_of_measurement: "Hz"
     value_type: U_WORD
     accuracy_decimals: 0
     icon: mdi:car-turbocharger
