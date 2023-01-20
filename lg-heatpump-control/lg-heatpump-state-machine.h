@@ -549,10 +549,9 @@
     }
   }
   int state_machine_class::get_target_offset(){
-    if(input[OAT]->value > 15) return -3;
-    if(input[OAT]->value < id(oat_silent_always_off).state) return -3;
-    if(input[OAT]->value < id(oat_silent_always_on).state) return -1;
-    return -2;
+    if(input[OAT]->value >= 10) return -3;
+    if(input[OAT]->value >= id(oat_silent_always_on).state) return -2;
+    return -1;
   }
   void state_machine_class::set_new_target(float new_target){
     //TODO check for multiple target changes during run
