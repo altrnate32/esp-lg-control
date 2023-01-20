@@ -103,12 +103,12 @@ number:
     icon: mdi:meter-electric-outline
     optimistic: true
   - platform: template
-    name: "Compressor RPM Sim"
+    name: "Compressor Hz Sim"
     id: compressor_rpm
     min_value: 0
     max_value: 100
     initial_value: 0
     step: 1
-    unit_of_measurement: "RPM"
+    unit_of_measurement: "Hz"
     icon: mdi:car-turbocharger
     optimistic: true
