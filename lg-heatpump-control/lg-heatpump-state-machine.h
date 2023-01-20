@@ -40,7 +40,7 @@
         int alive_timer = 120; //interval in seconds for an 'alive' message in the logs
         float delta = 0; //Current Error value negative below target, positive above target
         float pendel_delta = 0; //Error value in regard to pendel target
-        float backup_heater_cop_limit = 1.5; //below which cop should the backup heater be switched on? Set to a large negative number (example -1000) to disable 
+        float backup_heater_cop_limit = 0.0; //below which cop should the backup heater be switched on? Set to a large negative number (example -1000) to disable 
         float derivative_D_5 = 0; //derivative based on past 5 minutes
         float derivative_D_10 = 0; //derivative based on past 10 minutes
         float pred_20_delta_5 = 0; //predicted delta in 20 minutes based on last 5 minute derivative
