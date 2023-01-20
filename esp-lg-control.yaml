@@ -254,7 +254,7 @@ sensor:
     accuracy_decimals: 0
   - platform: uptime
     name: "${device_name} Uptime"
-    unit_of_measurement: days
+    unit_of_measurement: d
     update_interval: 3600s
     accuracy_decimals: 1
     filters:
