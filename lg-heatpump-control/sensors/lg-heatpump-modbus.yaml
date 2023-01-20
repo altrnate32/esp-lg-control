@@ -204,14 +204,15 @@ sensor:
       - multiply: 0.1
   - platform: modbus_controller
     modbus_controller_id: lg
-    name: "Fan RPM"
-    id: fan_rpm
+    name: "Unknown Temp 19"
+    id: temp19
     register_type: read
     address: 19
-    unit_of_measurement: "RPM"
+    unit_of_measurement: "°C"
     value_type: S_WORD
     accuracy_decimals: 0
-    icon: mdi:fan
+    filters:
+      - multiply: 0.1    
   - platform: modbus_controller
     modbus_controller_id: lg
     name: "Condenser Temp"
