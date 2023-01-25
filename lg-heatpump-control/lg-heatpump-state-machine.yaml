@@ -210,8 +210,8 @@ lambda: !lambda |-
         fsm.add_event(BACKUP_HEAT);
         if(fsm.check_change_events()) break;
         
-        //check low COP
-        if(fsm.check_low_cop_trigger() && fsm.input[BACKUP_HEAT]->seconds_since_change() > (15*60)) {
+        //check low TEMP (for backup_heat_always_on)
+        if(fsm.check_low_temp_trigger() && fsm.input[BACKUP_HEAT]->seconds_since_change() > (15*60)) {
           fsm.backup_heat(true,true);
         }
 
@@ -320,8 +320,8 @@ lambda: !lambda |-
         fsm.add_event(BACKUP_HEAT);
         if(fsm.check_change_events()) break;
         
-        //check low COP
-        if(fsm.check_low_cop_trigger() && fsm.input[BACKUP_HEAT]->seconds_since_change() > (15*60)) {
+        //check low temp (for backup_heat_always_on)
+        if(fsm.check_low_temp_trigger() && fsm.input[BACKUP_HEAT]->seconds_since_change() > (15*60)) {
           fsm.backup_heat(true,true);
         }
 

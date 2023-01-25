@@ -226,6 +226,16 @@ number:
     initial_value: 2
     optimistic: true
     icon: mdi:gas-burner
+  - platform: template
+    id: backup_heater_always_on_temp
+    name: "Buitentemperatuur backup heater always on"
+    min_value: -30
+    max_value: 20
+    step: 1
+    restore_value: yes
+    initial_value: -6
+    optimistic: true
+    icon: mdi:gas-burner
 
 switch:
   - platform: restart
@@ -276,26 +286,6 @@ sensor:
     id: derivative_value
     accuracy_decimals: 1
     unit_of_measurement: "°C/h" 
-    update_interval: never  
-    icon: mdi:sigma
-  #very innacurate, use only for global reference
-  - platform: template
-    name: "COP guess"
-    id: cop_guess
-    lambda: |-
-      if(id(current_flow_rate).state < 6 || id(wp_delta_t).state <= 0) return 0;
-      if(!id(compressor_running).state || id(wp_sensed_power).state < 300) return 0;
-      if(id(wp_delta_t).state < 0) return 0;
-      return ((id(current_flow_rate).state/60)*(id(wp_delta_t).state*4184))/id(wp_sensed_power).state;
-    accuracy_decimals: 1
-    unit_of_measurement: "COP"
-    update_interval: 60 sec
-    icon: mdi:approximately-equal
-  - platform: template
-    name: "Average cop"
-    id: average_cop_sensor
-    accuracy_decimals: 1
-    unit_of_measurement: "COP" 
     update_interval: never  
     icon: mdi:sigma
 # Sensors for ESP version and WIFI information

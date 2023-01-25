@@ -88,12 +88,12 @@ lambda: !lambda |-
             compressor_target = 0;
           }
         } else {
-           compressor_rpm_var = compressor_rpm_var / 1.4;
-           if(compressor_rpm_var < compressor_target) {
-             compressor_rpm_var = compressor_target;
-             compressor_change_run = false;
-             compressor_target = 0;
-           }
+          compressor_rpm_var = compressor_rpm_var / 1.4;
+          if(compressor_rpm_var < compressor_target) {
+            compressor_rpm_var = compressor_target;
+            compressor_change_run = false;
+            compressor_target = 0;
+          }
         }
         id(compressor_rpm).publish_state(compressor_rpm_var);
       } else {
@@ -135,8 +135,7 @@ lambda: !lambda |-
       if(power_used < 500) power_used = 500;
       energy_gain = power_delivered;
     }
-    id(wp_sensed_power).publish_state(round(power_used + 100));
-    
+        
     //backup heater energy gain
     if(id(relay_backup_heat).state){
       energy_gain = energy_gain + backup_power_watt;

@@ -93,16 +93,6 @@ number:
     optimistic: true
     icon: mdi:weather-cloudy
   - platform: template
-    name: "WP Sensed Power Sim"
-    id: wp_sensed_power
-    min_value: 100
-    max_value: 4000
-    initial_value: 100
-    step: 500
-    unit_of_measurement: "W"
-    icon: mdi:meter-electric-outline
-    optimistic: true
-  - platform: template
     name: "Compressor Hz Sim"
     id: compressor_rpm
     min_value: 0

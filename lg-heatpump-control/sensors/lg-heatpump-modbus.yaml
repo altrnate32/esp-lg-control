@@ -227,8 +227,8 @@ sensor:
     icon: mdi:hvac
   - platform: modbus_controller
     modbus_controller_id: lg
-    name: "WP Sensed Power"
-    id: wp_sensed_power
+    name: "Unknown Value 22"
+    id: unknown22
     register_type: read
     address: 22
     value_type: U_WORD
