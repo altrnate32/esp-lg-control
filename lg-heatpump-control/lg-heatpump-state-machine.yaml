@@ -108,8 +108,8 @@ lambda: !lambda |-
         //set target, with minimum of tracking value+2 (to ensure compressor start)
         //but not above stooklijn_target
         int new_target = fsm.input[STOOKLIJN_TARGET]->value + fsm.get_target_offset();
-        if(new_target < fsm.input[TRACKING_VALUE]->value - 2) new_target = fsm.input[TRACKING_VALUE]->value - 2;
-        if(new_target > fsm.input[STOOKLIJN_TARGET]->value) new_target = fsm.input[STOOKLIJN_TARGET]->value + fsm.get_target_offset();
+        if(new_target < fsm.input[TRACKING_VALUE]->value + 2) new_target = fsm.input[TRACKING_VALUE]->value + 2;
+        if(new_target > fsm.input[STOOKLIJN_TARGET]->value) new_target = fsm.input[STOOKLIJN_TARGET]->value;
         fsm.set_new_target(new_target);
         ESP_LOGD(fsm.state_name(), "Run start initial target set; stooklijn_target: %f pendel_target: %f tracking_value: %f ",fsm.input[STOOKLIJN_TARGET]->value,fsm.input[TEMP_NEW_TARGET]->value,fsm.input[TRACKING_VALUE]->value);
         fsm.set_run_start_time();
