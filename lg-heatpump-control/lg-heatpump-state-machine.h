@@ -308,13 +308,13 @@
       if(input[THERMOSTAT_SENSOR]->seconds_since_change() > (id(thermostat_on_delay).state*60)) return true;
     } else {
       //state change is a switch to off
-      //check for instant off
-      if(!input[COMPRESSOR]->state || state() == SWW || state() == DEFROST) return false;
-      //check if off delay time has passed
-      if(input[THERMOSTAT_SENSOR]->seconds_since_change() > (id(thermostat_off_delay).state*60)) {
-        //then check if minimum run time has passed
-        if((get_run_time() - run_start_time) > (id(minimum_run_time).state * 60))return false;
-      }
+      //first check if minimum run time has passed
+      if((get_run_time() - run_start_time) > (id(minimum_run_time).state * 60)){
+        //check for instant off
+        if(!input[COMPRESSOR]->state || state() == SWW || state() == DEFROST) return false;
+        //check if off delay time has passed
+        if(input[THERMOSTAT_SENSOR]->seconds_since_change() > (id(thermostat_off_delay).state*60)) return false;
+      }      
     }
     //return previous state
     return input[THERMOSTAT]->state;
