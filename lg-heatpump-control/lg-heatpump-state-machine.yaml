@@ -290,7 +290,7 @@ lambda: !lambda |-
           //target overshoot logic to return to target
           //check if target can be lowered without killing the run
           if(fsm.pendel_delta <= fsm.hysteresis-1){
-            //lower target, but not below fsm.input[STOOKLIJN_TARGET]->value next step may do that if needed
+            //lower target, but not below fsm.input[STOOKLIJN_TARGET]->value next step may do that if needed (there is no next step anymore...)
             fsm.input[TEMP_NEW_TARGET]->receive_value(max(fsm.input[STOOKLIJN_TARGET]->value,fsm.input[TEMP_NEW_TARGET]->value - 1));
             ESP_LOGD(fsm.state_name(), "Operating above stooklijn_target pendel_target (%f) could be lowered",fsm.input[TEMP_NEW_TARGET]->value);
             break;
@@ -366,13 +366,13 @@ lambda: !lambda |-
           break;
         }
         //4: We are operating at target, are we modulating?
-        if(fsm.compressor_modulation() && fsm.input[TEMP_NEW_TARGET]->value < fsm.input[STOOKLIJN_TARGET]->value+3){
+        if(fsm.compressor_modulation() && fsm.input[TEMP_NEW_TARGET]->value < fsm.input[STOOKLIJN_TARGET]->value+3 && id(change_target_stall).state){
           //raise target above stooklijn target to stop modulation
           fsm.input[TEMP_NEW_TARGET]->receive_value(min(fsm.input[STOOKLIJN_TARGET]->value+3,fsm.input[TRACKING_VALUE]->value + 3));
           ESP_LOGD(fsm.state_name(), "Modulating, raising target, pendel_target: %f",fsm.input[TEMP_NEW_TARGET]->value);
           break;
         }
-        //5 We are above target and with no modulation, so those tricks are gone. How bad is it?
+        //5 We are above target (or target change is not allowed) and with no modulation, so those tricks are gone. How bad is it?
         if((fsm.delta + (fsm.derivative_D_5*30)) < 0){
           //it will still not be fixed next 30 minutes
           if(fsm.input[OAT]->value < id(backup_heater_active_temp).state && !id(relay_backup_heat).state){
@@ -454,7 +454,6 @@ lambda: !lambda |-
             else fsm.state_transition(WAIT);
             //start boost if we were running without backup heat
             if(!fsm.input[BACKUP_HEAT]->state){
-              if(fsm.input[OAT]->value > id(backup_heater_active_temp).state) fsm.boost(true);
               id(controller_info).publish_state("SWW done starting boost.");
               fsm.boost(true);
             }
@@ -486,6 +485,8 @@ lambda: !lambda |-
 
         if(!fsm.input[DEFROST_RUN]->state){
           //defrosting stopped initially start with stooklijn_target as target
+          fsm.boost(true);
+          if(id(silent_after_defrost).state) fsm.set_silent_after_defrost();
           if(fsm.input[TEMP_NEW_TARGET]->value != fsm.input[STOOKLIJN_TARGET]->value) fsm.input[TEMP_NEW_TARGET]->receive_value(fsm.input[STOOKLIJN_TARGET]->value);
           //10 minute delay (defrost takes 4 minutes) some additional delay to allow values to stabilize and backup heater to run
           if(fsm.seconds_since_state_start() < (10*60)) break;
@@ -503,6 +504,7 @@ lambda: !lambda |-
             }
           } else {
             fsm.backup_heat(false);
+            fsm.boost(false);
             fsm.state_transition(WAIT);
           }
         }

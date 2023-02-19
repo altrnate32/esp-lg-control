@@ -81,7 +81,7 @@ number:
             fsm.update_stooklijn();
   - platform: template
     id: stooklijn_min_oat
-    name: "Stooklijn Minimum Buitentemperatuur"
+    name: "Stooklijn Minimum Outside-temp"
     min_value: -25
     max_value: 0
     step: 1
@@ -96,7 +96,7 @@ number:
             fsm.update_stooklijn();
   - platform: template
     id: stooklijn_max_wtemp
-    name: "Stooklijn Maximum Watertemperatuur"
+    name: "Stooklijn Maximum Water-temp"
     min_value: 20
     max_value: 60
     step: 1
@@ -111,7 +111,7 @@ number:
             fsm.update_stooklijn();
   - platform: template
     id: stooklijn_min_wtemp
-    name: "Stooklijn Minimum Watertemperatuur"
+    name: "Stooklijn Minimum Water-temp"
     min_value: 20
     max_value: 40
     step: 1
@@ -126,7 +126,7 @@ number:
             fsm.update_stooklijn();
   - platform: template
     id: stooklijn_max_oat
-    name: "Stooklijn Start Buitentemperatuur"
+    name: "Stooklijn Start Outside-temp"
     min_value: 0
     max_value: 20
     step: 1
@@ -163,7 +163,7 @@ number:
     icon: mdi:timer-cog-outline
   - platform: template
     id: oat_silent_always_off
-    name: "Buitentemperatuur silent always off"
+    name: "Outside-temp silent always off"
     min_value: -20
     max_value: 10
     step: 1
@@ -174,7 +174,7 @@ number:
     icon: mdi:volume-plus
   - platform: template
     id: oat_silent_always_on
-    name: "Buitentemperatuur silent always on"
+    name: "Outside-temp silent always on"
     min_value: -20
     max_value: 20
     step: 1
@@ -218,7 +218,7 @@ number:
     icon: mdi:timer-plus-outline
   - platform: template
     id: backup_heater_active_temp
-    name: "Buitentemperatuur backup heater active"
+    name: "Outside-temp backup heater active"
     min_value: -30
     max_value: 20
     step: 1
@@ -228,7 +228,7 @@ number:
     icon: mdi:gas-burner
   - platform: template
     id: backup_heater_always_on_temp
-    name: "Buitentemperatuur backup heater always on"
+    name: "Outside-temp backup heater always on"
     min_value: -30
     max_value: 20
     step: 1
@@ -237,7 +237,53 @@ number:
     optimistic: true
     icon: mdi:gas-burner
 
+select:
+  - platform: template
+    name: "Automatic Boost"
+    id: automatic_boost
+    options:
+      - "OFF"
+      - "After Defrost"
+      - "After DHW"
+      - "After Defrost/DHW"
+    restore_value: true
+    optimistic: true
+    on_value:
+      then:
+        lambda: !lambda |-
+            fsm.proces_selects();
+  - platform: template
+    name: "Backup Heat Auto On"
+    id: backup_heat_mode
+    options:
+      - "OFF"
+      - "During Defrost"
+      - "During DHW"
+      - "During Low Temperature"
+      - "During Stall"
+      - "During DHW/Defrost"
+      - "During Stall/Low Temperature"
+      - "During All Above Cases"
+    restore_value: true
+    optimistic: true
+    on_value:
+      then:
+        lambda: !lambda |-
+            fsm.proces_selects();
+
 switch:
+  - platform: template
+    name: "Enable Silent After Defrost"
+    id: silent_after_defrost
+    restore_mode: RESTORE_DEFAULT_OFF
+    optimistic: true
+    icon: mdi:snowflake-melt
+  - platform: template
+    name: "Change Target during Stall"
+    id: change_target_stall
+    restore_mode: RESTORE_DEFAULT_OFF
+    optimistic: true
+    icon: mdi:target-variant
   - platform: restart
     name: "ESP WP Control Restart"
   - platform: template

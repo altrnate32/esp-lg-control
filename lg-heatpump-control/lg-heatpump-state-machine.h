@@ -28,6 +28,17 @@
         std::vector<float> derivative; //vector of floats to integrate derivative (used in control logic)
         bool backup_heat_temp_limit_trigger = false; //if backup heat triggered due to low temperature (always on)?
         bool update_stooklijn_bool = true;
+        //backup_heat_mode select
+        bool backup_heat_stall = false;
+        bool backup_heat_sww = false;
+        bool backup_heat_defrost = false;
+        bool backup_heat_lowtemp = false;
+        //automatic_boost select
+        bool boost_defrost = false;
+        bool boost_sww = false;
+        //silent after defrost
+        bool silent_on_after_defrost = false;
+        uint_fast32_t silent_after_defrost_start_time;
       public:
         input_struct* input[16]; //list of all inputs
         bool entry_done = false;
@@ -72,6 +83,7 @@
         void toggle_boost();
         void silent_mode(bool mode);
         void toggle_silent_mode();
+        void set_silent_after_defrost();
         int get_target_offset();
         void set_new_target(float new_target);
         void start_events();
@@ -80,6 +92,7 @@
         bool compressor_modulation();
         bool check_low_temp_trigger();
         void set_target_temp(float target);
+        void proces_selects();
     };
   input_struct::input_struct(uint_fast32_t* run_time_pointer){
     run_time = run_time_pointer;
@@ -413,28 +426,32 @@
         id(controller_info).publish_state("ERROR: backup_heat on before heat.");
       } else {
         if(!id(relay_backup_heat).state){
-          id(relay_backup_heat).turn_on();
-          input[BACKUP_HEAT]->receive_state(true);
+          backup_heat_temp_limit_trigger = false;
           if(temp_limit_trigger) {
+            if(!backup_heat_lowtemp) return;
             backup_heat_temp_limit_trigger = true;
             id(controller_info).publish_state("Backup heat on due to low temp");
           } else if(input[SWW_RUN]->state) {
+            if(!backup_heat_sww) return;
             id(controller_info).publish_state("Backup heat on due to SWW run");
           } else if(input[DEFROST_RUN]->state) {
+            if(!backup_heat_defrost) return;
             id(controller_info).publish_state("Backup heat on due to Defrost");
           } else if(state() == STALL){
+            if(!backup_heat_stall) return;
             id(controller_info).publish_state("Backup heat on due to STALL");
           } else {
             id(controller_info).publish_state("Backup heat on");
           }
+          id(relay_backup_heat).turn_on();
+          input[BACKUP_HEAT]->receive_state(true);
         }
         //if relay_backup_heat is turned on, relay_pump must also be turned on
         if(!input[EXTERNAL_PUMP]->state){
           external_pump(true);
           ESP_LOGD(state_name(),"Invalid configuration relay_backup_heat on before relay_pump.");
           id(controller_info).publish_state("Invalid config: backup_heat on before pump.");
-        }
-        backup_heat_temp_limit_trigger = false;
+        }        
       }
     } else {
       if(id(relay_backup_heat).state){
@@ -450,7 +467,11 @@
   //***************************************************************
   void state_machine_class::boost(bool mode){
     if(mode){
-      if(!input[BOOST]->state) id(boost_switch).turn_on();
+      if(!input[BOOST]->state){
+        if(state() == SWW && !boost_sww) return;
+        if(state() == DEFROST && !boost_defrost) return;
+        id(boost_switch).turn_on();
+      } 
     } else {
       if(input[BOOST]->state) id(boost_switch).turn_off();
     }
@@ -488,13 +509,24 @@
     //if input[OAT]->value >= silent always on: silent on
     //if input[OAT]->value <= silent always off: silent off
     //if in between: if boost or stall silent off otherwise silent on
-
+    
     if(input[OAT]->value >= id(oat_silent_always_on).state) {
       if(!input[SILENT_MODE]->state){
         ESP_LOGD(state_name(),"oat > oat_silent_always_on and silent mode off, switching silent mode on");
         id(controller_info).publish_state("Switching Silent mode on oat > on");
         silent_mode(true);
       }
+    } else if(silent_on_after_defrost){
+      if((get_run_time() - silent_after_defrost_start_time) > (20*60)){
+        //switch off after 20 minutes
+        silent_on_after_defrost = false;
+        if(input[SILENT_MODE]->state){
+          ESP_LOGD(state_name(),"silent_after_defrost elapsed Switching silent mode off");
+          id(controller_info).publish_state("Switching silent mode off 20 min after defrost"); 
+          silent_mode(false);
+        }
+      }
+    
     } else if(input[OAT]->value <= id(oat_silent_always_off).state){
       if(input[SILENT_MODE]->state){
         ESP_LOGD(state_name(),"Oat < oat_silent_always_off Switching silent mode off");
@@ -514,6 +546,13 @@
         silent_mode(true);
       }
     }
+  }
+  void state_machine_class::set_silent_after_defrost(){
+    silent_after_defrost_start_time = get_run_time();
+    silent_on_after_defrost = true;
+    silent_mode(true);
+    ESP_LOGE(state_name(), "Silent on After Defrost");
+    id(controller_info).publish_state("Switching Silent on after defrost");
   }
   int state_machine_class::get_target_offset(){
     if(input[OAT]->value >= 10) return -3;
@@ -623,6 +662,83 @@
     water_temp_call.perform();
     ESP_LOGD("set_target_temp", "Modbus target set to: %f", round(target));
     id(doel_temp).publish_state(target*10);
+  }
+  //proces automatic_boost and backup_heat_mode selects
+  void state_machine_class::proces_selects(){
+    auto index = id(automatic_boost).active_index();
+    switch(index.value()){
+      case 0:
+        boost_defrost = false;
+        boost_sww = false;
+        if(input[BOOST]->state) id(boost_switch).turn_off();
+      break;
+      case 1:
+        boost_defrost = true;
+        boost_sww = false;  
+      break;
+      case 2:
+        boost_defrost = false;
+        boost_sww = true;
+      break;
+      case 3:
+        boost_defrost = true;
+        boost_sww = true;
+      break;
+    }
+    index = id(backup_heat_mode).active_index();
+    switch(index.value()){
+      case 0:
+        backup_heat_stall = false;
+        backup_heat_sww = false;
+        backup_heat_defrost = false;
+        backup_heat_lowtemp = false;
+        if(input[BACKUP_HEAT]->state) backup_heat(false);
+      break;
+      case 1:
+        backup_heat_stall = false;
+        backup_heat_sww = false;
+        backup_heat_defrost = true;
+        backup_heat_lowtemp = false;
+      break;
+      case 2:
+        backup_heat_stall = true;
+        backup_heat_sww = true;
+        backup_heat_defrost = false;
+        backup_heat_lowtemp = false;
+      break;
+      case 3:
+        backup_heat_stall = false;
+        backup_heat_sww = false;
+        backup_heat_defrost = false;
+        backup_heat_lowtemp = true;
+      break;
+      case 4:
+        backup_heat_stall = true;
+        backup_heat_sww = false;
+        backup_heat_defrost = false;
+        backup_heat_lowtemp = false;
+      break;
+      case 5:
+        backup_heat_stall = false;
+        backup_heat_sww = true;
+        backup_heat_defrost = true;
+        backup_heat_lowtemp = true;
+      break;
+      case 6:
+        backup_heat_stall = true;
+        backup_heat_sww = false;
+        backup_heat_defrost = false;
+        backup_heat_lowtemp = true;
+      break;
+      case 7:
+        backup_heat_stall = true;
+        backup_heat_sww = true;
+        backup_heat_defrost = true;
+        backup_heat_lowtemp = true;
+      break;
+    }
+    ESP_LOGD("proces_selects", "backup_heat stall: %d sww: %d defrost: %d lowtemp: %d",backup_heat_stall, backup_heat_sww, backup_heat_defrost, backup_heat_lowtemp);
+    ESP_LOGD("proces_selects", "automatic_boost defrost: %d sww: %d",boost_defrost,boost_sww);
   }
   
   //main state machine object

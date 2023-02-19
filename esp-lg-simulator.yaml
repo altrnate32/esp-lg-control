@@ -64,7 +64,7 @@ number:
             fsm.update_stooklijn();
   - platform: template
     id: stooklijn_min_oat
-    name: "Stooklijn Minimum Buitentemperatuur Sim"
+    name: "Stooklijn Minimum Outside-temp Sim"
     min_value: -25
     max_value: 0
     step: 1
@@ -79,7 +79,7 @@ number:
             fsm.update_stooklijn();
   - platform: template
     id: stooklijn_max_wtemp
-    name: "Stooklijn Maximum Watertemperatuur Sim"
+    name: "Stooklijn Maximum Water-temp Sim"
     min_value: 20
     max_value: 60
     step: 1
@@ -94,7 +94,7 @@ number:
             fsm.update_stooklijn();
   - platform: template
     id: stooklijn_min_wtemp
-    name: "Stooklijn Minimum Watertemperatuur Sim"
+    name: "Stooklijn Minimum Water-temp Sim"
     min_value: 20
     max_value: 40
     step: 1
@@ -109,7 +109,7 @@ number:
             fsm.update_stooklijn();
   - platform: template
     id: stooklijn_max_oat
-    name: "Stooklijn Start Buitentemperatuur Sim"
+    name: "Stooklijn Start Outside-temp Sim"
     min_value: 0
     max_value: 20
     step: 1
@@ -124,7 +124,7 @@ number:
             fsm.update_stooklijn();
   - platform: template
     id: minimum_run_time
-    name: "Minimale run tijd Sim"
+    name: "Minimum run time Sim"
     min_value: 0
     max_value: 60
     step: 1
@@ -146,7 +146,7 @@ number:
     icon: mdi:timer-cog-outline
   - platform: template
     id: oat_silent_always_off
-    name: "Buitentemperatuur silent always off Sim"
+    name: "Outside-temp silent always off Sim"
     min_value: -20
     max_value: 10
     step: 1
@@ -157,7 +157,7 @@ number:
     icon: mdi:volume-plus
   - platform: template
     id: oat_silent_always_on
-    name: "Buitentemperatuur silent always on Sim"
+    name: "Outside-temp silent always on Sim"
     min_value: -20
     max_value: 20
     step: 1
@@ -201,7 +201,7 @@ number:
     icon: mdi:timer-plus-outline
   - platform: template
     id: backup_heater_active_temp
-    name: "Buitentemperatuur backup heater active Sim"
+    name: "Outside-temp backup heater active Sim"
     min_value: -30
     max_value: 20
     step: 1
@@ -211,7 +211,7 @@ number:
     icon: mdi:gas-burner
   - platform: template
     id: backup_heater_always_on_temp
-    name: "Buitentemperatuur backup heater always on SIM"
+    name: "Outside-temp backup heater always on SIM"
     min_value: -30
     max_value: 20
     step: 1
@@ -219,6 +219,40 @@ number:
     initial_value: -6
     optimistic: true
     icon: mdi:gas-burner
+
+select:
+  - platform: template
+    name: "Automatic Boost Sim"
+    id: automatic_boost
+    options:
+      - "OFF"
+      - "After Defrost"
+      - "After DHW"
+      - "After Defrost/DHW"
+    restore_value: true
+    optimistic: true
+    on_value:
+      then:
+        lambda: !lambda |-
+            fsm.proces_selects();
+  - platform: template
+    name: "Backup Heat Auto On Sim"
+    id: backup_heat_mode
+    options:
+      - "OFF"
+      - "During Defrost"
+      - "During DHW"
+      - "During Low Temperature"
+      - "During Stall"
+      - "During DHW/Defrost"
+      - "During Stall/Low Temperature"
+      - "During All Above Cases"
+    restore_value: true
+    optimistic: true
+    on_value:
+      then:
+        lambda: !lambda |-
+            fsm.proces_selects();
 
 switch:
   - platform: template
@@ -245,6 +279,18 @@ switch:
     id: boost_switch
     optimistic: true
     icon: mdi:thermometer-plus
+  - platform: template
+    name: "Enable Silent After Defrost Sim"
+    id: silent_after_defrost
+    restore_mode: RESTORE_DEFAULT_OFF
+    optimistic: true
+    icon: mdi:snowflake-melt
+  - platform: template
+    name: "Change Target during Stall Sim"
+    id: change_target_stall
+    restore_mode: RESTORE_DEFAULT_OFF
+    optimistic: true
+    icon: mdi:target-variant
 
 interval:
   - interval: 10s
