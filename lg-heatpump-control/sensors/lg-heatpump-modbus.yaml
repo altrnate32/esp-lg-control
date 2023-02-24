@@ -163,7 +163,7 @@ sensor:
     filters:
       - multiply: 0.1
       - sliding_window_moving_average:
-          window_size: 30
+          window_size: 60
           send_every: 30
     on_value:
       then:

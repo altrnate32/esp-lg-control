@@ -290,11 +290,11 @@
     //I need it in my installation as the stooklijn is spot on at relative high temperatures, but too low at lower temps
     const float Z =  0 - (float)( (id(stooklijn_max_wtemp).state-id(stooklijn_min_wtemp).state)/(id(stooklijn_min_oat).state - id(stooklijn_max_oat).state));
     //If oat above or below maximum/minimum oat, clamp to stooklijn_max/min value
-    float oat_value = input[OAT]->value;
+    float oat_value = round(input[OAT]->value);
     if(oat_value > id(stooklijn_max_oat).state) oat_value = id(stooklijn_max_oat).state;
     else if(oat_value < id(stooklijn_min_oat).state) oat_value = id(stooklijn_min_oat).state;
     float C = (id(stooklijn_curve).state*0.001)*pow((oat_value-id(stooklijn_max_oat).state),2);
-    new_stooklijn_target = (int)round( (Z * (id(stooklijn_max_oat).state-oat_value)) + id(stooklijn_min_wtemp).state + C);
+    new_stooklijn_target = (int)floor( (Z * (id(stooklijn_max_oat).state-oat_value)) + id(stooklijn_min_wtemp).state + C);
     //Add stooklijn offset
     new_stooklijn_target = new_stooklijn_target + id(wp_stooklijn_offset).state;
     //Add boost offset
