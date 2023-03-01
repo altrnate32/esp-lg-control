@@ -53,8 +53,8 @@ number:
   - platform: template
     name: "Stooklijn offset"
     id: wp_stooklijn_offset
-    min_value: -5
-    max_value: 5
+    min_value: -10
+    max_value: 10
     initial_value: 0
     step: 1
     restore_value: yes

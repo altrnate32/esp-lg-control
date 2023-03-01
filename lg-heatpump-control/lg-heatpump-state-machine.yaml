@@ -373,6 +373,12 @@ lambda: !lambda |-
           break;
         }
         //5 We are above target (or target change is not allowed) and with no modulation, so those tricks are gone. How bad is it?
+        //At this point give it 20 minutes since last target change and
+        //15 minutes since entering stall to prevent too eager backup heat switching
+        if(fsm.input[TEMP_NEW_TARGET]->seconds_since_change() < (20*60)||fsm.seconds_since_state_start() < (15*60)) {
+          ESP_LOGD(fsm.state_name(), "Stall is waiting for effect of previous target change");
+          break;
+        }
         if((fsm.delta + (fsm.derivative_D_5*30)) < 0){
           //it will still not be fixed next 30 minutes
           if(fsm.input[OAT]->value < id(backup_heater_active_temp).state && !id(relay_backup_heat).state){
