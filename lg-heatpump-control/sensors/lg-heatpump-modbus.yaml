@@ -175,7 +175,7 @@ sensor:
             }
   - platform: modbus_controller
     modbus_controller_id: lg
-    name: "Unknown Temp 16"
+    name: "Pipe in Temp"
     id: temp16
     register_type: read
     address: 16
@@ -186,14 +186,18 @@ sensor:
       - multiply: 0.1
   - platform: modbus_controller
     modbus_controller_id: lg
-    name: "Unknown register 17"
+    name: "Pipe Out Temp"
     id: temp17
     register_type: read
     address: 17
+    unit_of_measurement: "°C"
     value_type: S_WORD
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1
   - platform: modbus_controller
     modbus_controller_id: lg
-    name: "Unknown Temp 18"
+    name: "Suction Temp"
     id: temp18
     register_type: read
     address: 18
@@ -204,15 +208,13 @@ sensor:
       - multiply: 0.1
   - platform: modbus_controller
     modbus_controller_id: lg
-    name: "Unknown Temp 19"
+    name: "Fan RPM"
     id: temp19
     register_type: read
     address: 19
-    unit_of_measurement: "°C"
+    unit_of_measurement: "rpm"
     value_type: S_WORD
     accuracy_decimals: 0
-    filters:
-      - multiply: 0.1    
   - platform: modbus_controller
     modbus_controller_id: lg
     name: "Condenser Temp"
@@ -227,25 +229,23 @@ sensor:
     icon: mdi:hvac
   - platform: modbus_controller
     modbus_controller_id: lg
-    name: "Unknown Value 22"
-    id: unknown22
+    name: "High Press"
+    id: high_press
     register_type: read
     address: 22
     value_type: U_WORD
     accuracy_decimals: 0
-    unit_of_measurement: "W"
+    unit_of_measurement: "mbar"
     icon: mdi:meter-electric-outline
   - platform: modbus_controller
     modbus_controller_id: lg
-    name: "Pressure 2"
-    id: temp23
+    name: "Low Press"
+    id: low_press
     register_type: read
     address: 23
     value_type: U_WORD
-    accuracy_decimals: 2
-    unit_of_measurement: "bar"
-    filters:
-      - multiply: 0.01
+    accuracy_decimals: 0
+    unit_of_measurement: "mbar"
   - platform: modbus_controller
     modbus_controller_id: lg
     name: "Compressor Hz"
