@@ -75,9 +75,19 @@ lambda: !lambda |-
         //enforce config
         fsm.backup_heat(false);
         fsm.heat(false);
-        fsm.external_pump(false);
         fsm.boost(false);
-        
+
+        //check if pump has been off for more than 24 hours
+        if(!fsm.input[EXTERNAL_PUMP]->state && fsm.input[EXTERNAL_PUMP]->seconds_since_change() > 24 * 60 * 60){
+          fsm.external_pump(true);
+          ESP_LOGD(fsm.state_name(), "External Pump stick protection");
+          id(controller_info).publish_state("External Pump On for stick protection");
+        } else if(fsm.input[EXTERNAL_PUMP]->state && fsm.input[EXTERNAL_PUMP]->seconds_since_change() > 2 * 60){
+          //switch pump off after 2 minutes
+          fsm.external_pump(false);
+          ESP_LOGD(fsm.state_name(), "External Pump off");
+          id(controller_info).publish_state("External Pump Off");
+        }
         //check events
         fsm.start_events();
         fsm.add_event(SWW_RUN);
