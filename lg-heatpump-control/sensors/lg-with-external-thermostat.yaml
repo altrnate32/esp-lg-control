@@ -1,7 +1,8 @@
 binary_sensor:
   - platform: gpio # Thermostat input signal is connected to this input pin
     pin:
-      number: GPIO27
+      number: GPIO36
+      inverted: true
       mode:
         input: true
         pullup: false

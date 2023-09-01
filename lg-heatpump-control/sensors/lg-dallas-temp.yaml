@@ -1,5 +1,5 @@
 dallas:
-  - pin: 32
+  - pin: GPIO15
     update_interval: 30s
 
 sensor:

@@ -1,11 +1,12 @@
 modbus:
   id: modbus_lg
   uart_id: uart_modbus
+  flow_control_pin: GPIO5
   send_wait_time: 200ms
   
 uart:
-  tx_pin: GPIO26
-  rx_pin: GPIO25
+  tx_pin: GPIO17
+  rx_pin: GPIO16
   baud_rate: 9600
   id: uart_modbus
   parity: none
