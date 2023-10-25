@@ -153,14 +153,6 @@ sensor:
     icon: mdi:waves-arrow-right
   - platform: modbus_controller
     modbus_controller_id: lg
-    name: "Current Energy State"
-    id: read_energy_state
-    register_type: read
-    address: 11
-    value_type: U_WORD
-    icon: mdi:home-battery-outline
-  - platform: modbus_controller
-    modbus_controller_id: lg
     name: "Buitentemperatuur"
     id: buiten_temp
     register_type: read
@@ -301,32 +293,3 @@ number:
     value_type: U_WORD
     step: 0.1
     multiply: 10
-  - platform: modbus_controller
-    modbus_controller_id: lg
-    id: energy_state_output
-    register_type: holding
-    address: 9
-    value_type: U_WORD
-    step: 1
-    internal: True
-
-select:
-  - platform: template
-    name: Select Energy State
-    id: select_energy_state
-    options:
-      - "0 - Not Used"
-      - "1 - Forced Off"
-      - "2 - Normal Operation"
-      - "3 - On Recommendation"
-      - "4 - On Command"
-      - "5 - On Command Step 2"
-      - "6 - On Recommendation Step 1"
-      - "7 - Energy Saving"
-      - "8 - Super Energy Saving"
-    initial_option: "OFF"
-    optimistic: true
-    set_action:
-      - logger.log:
-          format: "Chosen option: %s"
-          args: ["x.c_str()"]
