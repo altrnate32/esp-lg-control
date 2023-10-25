@@ -35,7 +35,8 @@ esphome:
             id(relay_pump).turn_off();
             id(relay_heat).turn_off();
           }
-          id(controller_state).publish_state("Initialiseren");
+          id(controller_state).publish_state("Init");
+          id(controller_info).publish_state("Initializing");
 
 # Enable logging. Disable modbus controller debug messages
 logger:

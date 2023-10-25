@@ -86,7 +86,7 @@ lambda: !lambda |-
           //switch pump off after 2 minutes
           fsm.external_pump(false);
           ESP_LOGD(fsm.state_name(), "External Pump off");
-          id(controller_info).publish_state("External Pump Off");
+          id(controller_info).publish_state("External Pump Off after stick protection");
         }
         //check events
         fsm.start_events();
@@ -112,6 +112,7 @@ lambda: !lambda |-
           fsm.external_pump(true); //external pump on
           fsm.heat(true); //heat on (to start heatpump)
           fsm.backup_heat(false);
+          id(controller_info).publish_state("External pump on. 3 min pre-run.");
         }
         //enforce config
         fsm.backup_heat(false);
@@ -126,6 +127,7 @@ lambda: !lambda |-
         fsm.set_new_target(new_target);
         ESP_LOGD(fsm.state_name(), "Run start initial target set; stooklijn_target: %f pendel_target: %f tracking_value: %f ",fsm.input[STOOKLIJN_TARGET]->value,fsm.input[TEMP_NEW_TARGET]->value,fsm.input[TRACKING_VALUE]->value);
         fsm.set_run_start_time();
+        id(controller_info).publish_state("Waiting for compressor start");
         fsm.state_transition(STARTING);
         break;
       }
@@ -152,6 +154,7 @@ lambda: !lambda |-
                 
         if(fsm.input[COMPRESSOR]->state){
           //we have ignition
+          id(controller_info).publish_state("Compressor is on; Waiting for modulation");
           fsm.state_transition(STABILIZE);
         }
         //update target if stooklijn or stooklijn offset changes, but only increase
@@ -190,6 +193,7 @@ lambda: !lambda |-
            if(fsm.compressor_modulation() || ((fsm.derivative_D_10 * 60) >= -3 && (fsm.derivative_D_10 * 60) <= 3)){
             //hand over to run algoritm, run will decide on overshoot/undershoot depending on where we stabilized
             ESP_LOGD(fsm.state_name(),"Stabilized, RUN is next");
+            id(controller_info).publish_state("Normal system operation");
             fsm.state_transition(RUN);
             break;
           }
@@ -273,6 +277,7 @@ lambda: !lambda |-
         //ENFORCE CONFIG: BACKUP_HEAT OFF
         //SPECIAL: none
         if(!fsm.entry_done){
+          id(controller_info).publish_state("Managing overshoot");
           fsm.entry_done = true;
         }
         //enforce allowed config and check events
@@ -293,6 +298,7 @@ lambda: !lambda |-
             fsm.set_new_target(fsm.input[STOOKLIJN_TARGET]->value);
             ESP_LOGD(fsm.state_name(), "stooklijn_target <= pendel_target, delta < 2, no overshoot predicted, my job is done.");
             fsm.state_transition(RUN);
+            id(controller_info).publish_state("Overshoot contained; Normal system operation");
             break;
           }
         }
@@ -327,6 +333,7 @@ lambda: !lambda |-
         //SPECIAL: none
         if(!fsm.entry_done){
           fsm.entry_done = true;
+          id(controller_info).publish_state("Stall detected; Recovering");
         }
         //enforce allowed config
         fsm.start_events();
@@ -351,6 +358,7 @@ lambda: !lambda |-
           fsm.set_new_target(fsm.input[STOOKLIJN_TARGET]->value);
           ESP_LOGD(fsm.state_name(), "delta > 0, stooklijn_target >= pendel_target, my job is done.");
           fsm.state_transition(RUN);
+          id(controller_info).publish_state("Stall recovered; Normal system operation");
           break;
         }
         
@@ -417,6 +425,7 @@ lambda: !lambda |-
         //ENFORCE CONFIG: NONE
         //SPECIAL: none
         if(!fsm.entry_done){
+          id(controller_info).publish_state("Compressor stopped -> Wait");
           fsm.entry_done = true;
         }
         //enforce allowed config
@@ -437,6 +446,7 @@ lambda: !lambda |-
         if(fsm.seconds_since_state_start() < (6*60)) break;
         if(fsm.input[COMPRESSOR]->state){
           fsm.state_transition(RUN);
+          id(controller_info).publish_state("Compressor on again; Wait is over");
           break;
         }
         break;
@@ -542,6 +552,7 @@ lambda: !lambda |-
         //ENFORCE CONFIG: BACKUP_HEAT OFF; RELAY_HEAT OFF; BOOST_OFF
         //SPECIAL: none
         if(!fsm.entry_done){
+          id(controller_info).publish_state("External Pump Running");
           fsm.entry_done = true;
         }
         //check events and enforce config
@@ -555,9 +566,11 @@ lambda: !lambda |-
         if(fsm.input[THERMOSTAT]->state) {
           fsm.state_transition(START);
           ESP_LOGD(fsm.state_name(), "THERMOSTAT ON next state: START");
+          id(controller_info).publish_state("From Afterrun to start");
         }
         //Timeout
         if(fsm.seconds_since_state_start() < (id(external_pump_runover).state*60)) break;
+        id(controller_info).publish_state("Afterrun complete");
         fsm.state_transition(IDLE);
         break;
       }
