@@ -305,7 +305,7 @@ lambda: !lambda |-
           if(new_target > fsm.input[STOOKLIJN_TARGET]->value + fsm.max_overshoot) new_target = fsm.input[STOOKLIJN_TARGET]->value + fsm.max_overshoot;
           fsm.set_safe_new_target(new_target);
           ESP_LOGD(fsm.state_name(), "Emergency intervention, raised pendel_target (%f) (if there was room)",fsm.input[TEMP_NEW_TARGET]->value);
-          id(controller_info).publish_state("Overshoot contained: Emrgency Intervention");
+          id(controller_info).publish_state("Overshoot: Emergency Intervention");
           break;
         }
         if(fsm.input[TEMP_NEW_TARGET]->value > fsm.input[STOOKLIJN_TARGET]->value){
