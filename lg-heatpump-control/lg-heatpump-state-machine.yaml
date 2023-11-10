@@ -121,8 +121,7 @@ lambda: !lambda |-
         if(fsm.seconds_since_state_start() < (3*60)) break;
         //set target, but not below stooklijn minimum water temp - 2
         int new_target = fsm.input[STOOKLIJN_TARGET]->value + fsm.get_target_offset();
-        if(new_target < id(stooklijn_min_wtemp).state - 2) new_target = id(stooklijn_min_wtemp).state - 2;
-        fsm.set_new_target(new_target);
+        fsm.set_safe_new_target(new_target);
         ESP_LOGD(fsm.state_name(), "Run start initial target set; stooklijn_target: %f pendel_target: %f tracking_value: %f ",fsm.input[STOOKLIJN_TARGET]->value,fsm.input[TEMP_NEW_TARGET]->value,fsm.input[TRACKING_VALUE]->value);
         fsm.set_run_start_time();
         id(controller_info).publish_state("Waiting for compressor start");
@@ -293,7 +292,7 @@ lambda: !lambda |-
           if(fsm.input[TEMP_NEW_TARGET]->value <= fsm.input[STOOKLIJN_TARGET]->value){
             //overshoot contained operating below or at target
             //hand back to RUN at target
-            fsm.set_new_target(fsm.input[STOOKLIJN_TARGET]->value);
+            fsm.set_safe_new_target(fsm.input[STOOKLIJN_TARGET]->value);
             ESP_LOGD(fsm.state_name(), "stooklijn_target <= pendel_target, delta < 2, no overshoot predicted, my job is done.");
             fsm.state_transition(RUN);
             id(controller_info).publish_state("Overshoot contained; Normal system operation");
@@ -304,16 +303,17 @@ lambda: !lambda |-
           //emergency situation, run is about to be killed. Raise Target to prevent
           int new_target = fsm.input[TEMP_NEW_TARGET]->value + 1;
           if(new_target > fsm.input[STOOKLIJN_TARGET]->value + fsm.max_overshoot) new_target = fsm.input[STOOKLIJN_TARGET]->value + fsm.max_overshoot;
-          fsm.set_new_target(new_target);
+          fsm.set_safe_new_target(new_target);
           ESP_LOGD(fsm.state_name(), "Emergency intervention, raised pendel_target (%f) (if there was room)",fsm.input[TEMP_NEW_TARGET]->value);
+          id(controller_info).publish_state("Overshoot contained: Emrgency Intervention");
           break;
         }
         if(fsm.input[TEMP_NEW_TARGET]->value > fsm.input[STOOKLIJN_TARGET]->value){
           //target overshoot logic to return to target
           //check if target can be lowered without killing the run
           if(fsm.pendel_delta <= fsm.hysteresis-1){
-            //lower target, but not below fsm.input[STOOKLIJN_TARGET]->value next step may do that if needed (there is no next step anymore...)
-            fsm.set_new_target(max(fsm.input[STOOKLIJN_TARGET]->value,fsm.input[TEMP_NEW_TARGET]->value - 1));
+            //lower target, but not below fsm.input[STOOKLIJN_TARGET]->value
+            fsm.set_safe_new_target(max(fsm.input[STOOKLIJN_TARGET]->value,fsm.input[TEMP_NEW_TARGET]->value - 1));
             ESP_LOGD(fsm.state_name(), "Operating above stooklijn_target pendel_target (%f) could be lowered",fsm.input[TEMP_NEW_TARGET]->value);
             break;
           }
@@ -352,8 +352,8 @@ lambda: !lambda |-
         //1: check if recovered
         if(fsm.input[TEMP_NEW_TARGET]->value >= fsm.input[STOOKLIJN_TARGET]->value && fsm.delta >= 0 && fsm.pred_20_delta_5 >= 0 && fsm.pred_20_delta_10 >= 0){
           //target is no longer below stooklijn_target. No longer a stall
-          //return to target and call run 
-          fsm.set_new_target(fsm.input[STOOKLIJN_TARGET]->value);
+          //return to target and call run
+          fsm.set_safe_new_target(fsm.input[STOOKLIJN_TARGET]->value);
           ESP_LOGD(fsm.state_name(), "delta > 0, stooklijn_target >= pendel_target, my job is done.");
           fsm.state_transition(RUN);
           id(controller_info).publish_state("Stall recovered; Normal system operation");
@@ -363,7 +363,7 @@ lambda: !lambda |-
         //2: check if below stooklijn target, with delta > 0 and modulating
         // (usually target change (boost) or after start). No minimum waiting time
         if(fsm.input[TEMP_NEW_TARGET]->value < fsm.input[STOOKLIJN_TARGET]->value && fsm.delta > 0 && fsm.compressor_modulation()){
-          fsm.set_new_target(fsm.input[STOOKLIJN_TARGET]->value); 
+          fsm.set_safe_new_target(fsm.input[STOOKLIJN_TARGET]->value); 
           break;
         }
         
@@ -379,13 +379,13 @@ lambda: !lambda |-
           if((fsm.delta + (fsm.derivative_D_5*30)) < 0){
             //it will not be fixed next 30 minutes, take a big step
             //current target + 3 or tracking value, whichever is higher
-            fsm.set_new_target(max(fsm.input[TRACKING_VALUE]->value,fsm.input[TEMP_NEW_TARGET]->value + 3)); 
+            fsm.set_safe_new_target(max(fsm.input[TRACKING_VALUE]->value,fsm.input[TEMP_NEW_TARGET]->value + 3)); 
           } else {
             //current target + 1 or tracking value, whichever is higher
-            fsm.set_new_target(max(fsm.input[TRACKING_VALUE]->value,fsm.input[TEMP_NEW_TARGET]->value  + 1));
+            fsm.set_safe_new_target(max(fsm.input[TRACKING_VALUE]->value,fsm.input[TEMP_NEW_TARGET]->value  + 1));
           }
           //but not above stooklijn_target (yet)
-          fsm.set_new_target(min(fsm.input[STOOKLIJN_TARGET]->value,fsm.input[TEMP_NEW_TARGET]->value));
+          fsm.set_safe_new_target(min(fsm.input[STOOKLIJN_TARGET]->value,fsm.input[TEMP_NEW_TARGET]->value));
           ESP_LOGD(fsm.state_name(), "Operating below target, raising target, pendel_target: %f",fsm.input[TEMP_NEW_TARGET]->value);
           break;
         }
@@ -437,7 +437,7 @@ lambda: !lambda |-
         
         //check if stooklijn value changed
         if(fsm.input[STOOKLIJN_TARGET]->has_flag()) {
-          fsm.set_new_target(fsm.input[STOOKLIJN_TARGET]->value);
+          fsm.set_safe_new_target(fsm.input[STOOKLIJN_TARGET]->value);
           ESP_LOGD(fsm.state_name(),"Target changed: Setting new target: %f",fsm.input[TEMP_NEW_TARGET]->value);
         }
         //wait at least 6 minutes before switching to run, even if compressor is running
@@ -489,7 +489,7 @@ lambda: !lambda |-
               id(controller_info).publish_state("SWW done starting boost.");
               fsm.boost(true);
             }
-            fsm.set_new_target(fsm.input[STOOKLIJN_TARGET]->value);
+            fsm.set_safe_new_target(fsm.input[STOOKLIJN_TARGET]->value);
             break;
           }
         } 
@@ -519,7 +519,7 @@ lambda: !lambda |-
           //defrosting stopped initially start with stooklijn_target as target
           fsm.boost(true);
           if(id(silent_after_defrost).state) fsm.set_silent_after_defrost();
-          if(fsm.input[TEMP_NEW_TARGET]->value != fsm.input[STOOKLIJN_TARGET]->value) fsm.set_new_target(fsm.input[STOOKLIJN_TARGET]->value);
+          if(fsm.input[TEMP_NEW_TARGET]->value != fsm.input[STOOKLIJN_TARGET]->value) fsm.set_safe_new_target(fsm.input[STOOKLIJN_TARGET]->value);
           //10 minute delay (defrost takes 4 minutes) some additional delay to allow values to stabilize and backup heater to run
           if(fsm.seconds_since_state_start() < (10*60)) break;
           if(!fsm.input[THERMOSTAT_SENSOR]->state){

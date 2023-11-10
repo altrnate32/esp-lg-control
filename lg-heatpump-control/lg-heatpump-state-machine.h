@@ -86,6 +86,7 @@
         void set_silent_after_defrost();
         int get_target_offset();
         void set_new_target(float new_target);
+        void set_safe_new_target(float new_target);
         void start_events();
         void add_event(input_types ev);
         bool check_change_events();
@@ -561,7 +562,19 @@
   }
   void state_machine_class::set_new_target(float new_target){
     //TODO check for multiple target changes during run
-    if(new_target != input[TEMP_NEW_TARGET]->value) input[TEMP_NEW_TARGET]->receive_value(new_target);
+    if(new_target != input[TEMP_NEW_TARGET]->value){
+      input[TEMP_NEW_TARGET]->receive_value(new_target);
+    } 
+  }
+  void state_machine_class::set_safe_new_target(float new_target){
+    //set a target that is not below tracking_value - 3
+    if(new_target != input[TEMP_NEW_TARGET]->value){
+      //don't allow a value below tracking_value-hysteresis+1
+      if(new_target < ((input[TRACKING_VALUE]->value-hysteresis)+1)) new_target = ((input[TRACKING_VALUE]->value-hysteresis)+1);
+      //also not below minimum watertemp -2
+      if(new_target < (id(stooklijn_min_wtemp).state - 2)) new_target = (id(stooklijn_min_wtemp).state - 2);
+      input[TEMP_NEW_TARGET]->receive_value(new_target);
+    }
   }
   void state_machine_class::start_events(){
     events.clear();
