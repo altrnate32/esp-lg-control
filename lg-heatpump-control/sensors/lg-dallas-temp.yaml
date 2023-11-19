@@ -20,48 +20,48 @@ sensor:
     name: "WP Supply Temperature"
     id: wp_out_temp
     filters:
-      - offset: 1.4
+      - offset: 0.5
     icon: mdi:thermometer-chevron-up
   - platform: dallas
     address: 0xd10122112fc5ee28
     name: "Buffer Top Supply Temperature"
     filters:
-      - offset: 3.9
+      - offset: 2.4
     icon: mdi:alpha-t-circle-outline
   - platform: dallas
     address: 0xe101221102a46b28
     name: "Buffer Top Temperature"
     icon: mdi:fridge-top
     filters:
-      - offset: 1.8
+      - offset: -0.8
   - platform: dallas
     address: 0x38030794971a4a28
     name: "CV Supply Temperature"
     filters:
-      - offset: 2.8
+      - offset: 0.8
     icon: mdi:radiator
   - platform: dallas
     address: 0x4503059497174a28
     name: "CV Return Temperature"
     filters:
-      - offset: 1.7
+      - offset: 0.6
     icon: mdi:radiator-disabled
   - platform: dallas
     address: 0xf30310949740b428
     name: "Buffer Bottom Supply Temperature"
     filters:
-      - offset: 3.9
+      - offset: 2.0
     icon: mdi:alpha-t-circle-outline
   - platform: dallas
     address: 0xd7000801c04e3210
     name: "Buffer Bottom Temperature"
     icon: mdi:fridge-bottom
     filters:
-      - offset: 1.0
+      - offset: 0.0
   - platform: dallas
     address: 0x2403069794065c28
     name: "WP Return Temperature"
     id: wp_return_temp
     filters:
-      - offset: 5.5
+      - offset: 4.1
     icon: mdi:alpha-t-circle-outline

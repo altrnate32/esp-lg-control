@@ -87,7 +87,7 @@ number:
     max_value: 0
     step: 1
     restore_value: yes
-    initial_value: -7
+    initial_value: -5
     unit_of_measurement: "°C"
     optimistic: true
     icon: mdi:download-circle-outline
@@ -117,7 +117,7 @@ number:
     max_value: 40
     step: 1
     restore_value: yes
-    initial_value: 28
+    initial_value: 26
     unit_of_measurement: "°C"
     optimistic: true
     icon: mdi:waves-arrow-left
@@ -132,7 +132,7 @@ number:
     max_value: 20
     step: 1
     restore_value: yes
-    initial_value: 11
+    initial_value: 14
     unit_of_measurement: "°C"
     optimistic: true
     icon: mdi:waves-arrow-left
@@ -158,7 +158,7 @@ number:
     max_value: 60
     step: 1
     restore_value: yes
-    initial_value: 10
+    initial_value: 20
     unit_of_measurement: "min"
     optimistic: true
     icon: mdi:timer-cog-outline
@@ -323,12 +323,27 @@ sensor:
     unit_of_measurement: "°C"
     accuracy_decimals: 1
     lambda: |-
-      //The +0.6 and -0.2 is a correction factor due to innacurate readings. Adapt this to your situation
-      //I do not correct it at the sensor, as the pump uses the uncorrected value for target setting, modulation etc
-      //Messing with this value at the sensor will mess up te script
-      return (float)((id(water_temp_aanvoer).state+0.6)-(id(water_temp_retour).state-0.2)); 
+      return (float)(id(corrected_water_temp_aanvoer).state-id(corrected_water_temp_retour).state); 
     update_interval: 30s
     icon: mdi:delta
+  - platform: template
+    name: "Corrected retour"
+    id: corrected_water_temp_retour
+    unit_of_measurement: "°C"
+    accuracy_decimals: 1
+    lambda: |-
+      return (float)(id(water_temp_retour).state-0.4); 
+    update_interval: 30s
+    icon: mdi:thermometer-chevron-down
+  - platform: template
+    name: "Corrected aanvoer"
+    id: corrected_water_temp_aanvoer
+    unit_of_measurement: "°C"
+    accuracy_decimals: 1
+    lambda: |-
+      return (float)(id(water_temp_aanvoer).state-0.2); 
+    update_interval: 30s
+    icon: mdi:thermometer-chevron-down
   - platform: template
     name: "Derivative"
     id: derivative_value
