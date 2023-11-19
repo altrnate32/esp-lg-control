@@ -560,7 +560,7 @@ lambda: !lambda |-
         fsm.start_events();
         fsm.add_event(SWW_RUN);
         if(fsm.check_change_events()) break;
-        //the 3 places where thermostat event does not lead to a switch off. Therefore not handled through check_change_events       
+        //the 3 places where thermostat event does not lead to a switch off. Therefore not handled through check_change_events
         if(fsm.input[THERMOSTAT]->state) {
           fsm.state_transition(START);
           ESP_LOGD(fsm.state_name(), "THERMOSTAT ON next state: START");

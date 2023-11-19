@@ -124,6 +124,15 @@ sensor:
     filters:
       - multiply: 0.1
     icon: mdi:thermometer-water
+  - platform: template
+    name: "Rounded SWW Temperature"
+    id: rounded_sww_temp
+    unit_of_measurement: "°C"
+    accuracy_decimals: 1
+    lambda: |-
+      return (float)(floor((id(sww_temp).state*2)+0.5)/2);
+    update_interval: 30s
+    icon: mdi:thermometer-water
   - platform: modbus_controller
     modbus_controller_id: lg
     name: "Garagetemperatuur"
@@ -283,6 +292,51 @@ sensor:
     filters:
       - multiply: 0.1
     icon: mdi:thermometer-water
+  - platform: template
+    name: "Delta T"
+    id: wp_delta_t
+    unit_of_measurement: "°C"
+    accuracy_decimals: 1
+    lambda: |-
+      return (float)(id(corrected_water_temp_aanvoer).state-id(corrected_water_temp_retour).state); 
+    update_interval: 30s
+    icon: mdi:delta
+  - platform: template
+    name: "Corrected retour"
+    id: corrected_water_temp_retour
+    unit_of_measurement: "°C"
+    accuracy_decimals: 1
+    lambda: |-
+      return (float)(id(water_temp_retour).state-0.4); 
+    update_interval: 30s
+    icon: mdi:thermometer-chevron-down
+  - platform: template
+    name: "Rounded Corrected retour"
+    id: rounded_corrected_water_temp_retour
+    unit_of_measurement: "°C"
+    accuracy_decimals: 1
+    lambda: |-
+      return (float)(floor((id(corrected_water_temp_retour).state*2)+0.5)/2);
+    update_interval: 30s
+    icon: mdi:thermometer-chevron-down
+  - platform: template
+    name: "Corrected aanvoer"
+    id: corrected_water_temp_aanvoer
+    unit_of_measurement: "°C"
+    accuracy_decimals: 1
+    lambda: |-
+      return (float)(id(water_temp_aanvoer).state-0.2); 
+    update_interval: 30s
+    icon: mdi:thermometer-chevron-up
+  - platform: template
+    name: "Rounded Corrected aanvoer"
+    id: rounded_corrected_water_temp_aanvoer
+    unit_of_measurement: "°C"
+    accuracy_decimals: 1
+    lambda: |-
+      return (float)(floor((id(corrected_water_temp_aanvoer).state*2)+0.5)/2);
+    update_interval: 30s
+    icon: mdi:thermometer-chevron-up
 
 number:
   - platform: modbus_controller

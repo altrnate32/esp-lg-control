@@ -318,33 +318,6 @@ sensor:
     filters:
       - multiply: 0.000011574
   - platform: template
-    name: "Delta T"
-    id: wp_delta_t
-    unit_of_measurement: "°C"
-    accuracy_decimals: 1
-    lambda: |-
-      return (float)(id(corrected_water_temp_aanvoer).state-id(corrected_water_temp_retour).state); 
-    update_interval: 30s
-    icon: mdi:delta
-  - platform: template
-    name: "Corrected retour"
-    id: corrected_water_temp_retour
-    unit_of_measurement: "°C"
-    accuracy_decimals: 1
-    lambda: |-
-      return (float)(id(water_temp_retour).state-0.4); 
-    update_interval: 30s
-    icon: mdi:thermometer-chevron-down
-  - platform: template
-    name: "Corrected aanvoer"
-    id: corrected_water_temp_aanvoer
-    unit_of_measurement: "°C"
-    accuracy_decimals: 1
-    lambda: |-
-      return (float)(id(water_temp_aanvoer).state-0.2); 
-    update_interval: 30s
-    icon: mdi:thermometer-chevron-down
-  - platform: template
     name: "Derivative"
     id: derivative_value
     accuracy_decimals: 1
