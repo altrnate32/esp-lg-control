@@ -587,9 +587,13 @@ lambda: !lambda |-
     //***************************************************************
     //Update modbus target if temp_new_target has changed    
     if(fsm.input[TEMP_NEW_TARGET]->has_flag() && fsm.input[TEMP_NEW_TARGET]->value != (float)id(doel_temp).state && fsm.state() != INIT){
-      //prevent update while still in INIT
-      //Update target through modbus
-      fsm.set_target_temp(fsm.input[TEMP_NEW_TARGET]->value);
+      //prevent update while still in INIT and when target setting disabled
+      if(id(disable_switch).state){
+        id(controller_info).publish_state("Target change inhibited by disable_switch");
+      } else {
+        //Update target through modbus
+        fsm.set_target_temp(fsm.input[TEMP_NEW_TARGET]->value);
+      }
     }
 
     //Now unflag all input values to be able to track changes on next run

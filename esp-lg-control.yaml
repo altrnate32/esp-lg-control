@@ -292,6 +292,13 @@ switch:
     id: boost_switch
     optimistic: true
     icon: mdi:thermometer-plus
+#if this switch is enabled target changes are not sent to HP
+  - platform: template
+    name: "Disable Target Setting"
+    id: disable_switch
+    restore_mode: RESTORE_DEFAULT_OFF
+    optimistic: true
+    icon: mdi:power
 
 interval:
   - interval: 30s
