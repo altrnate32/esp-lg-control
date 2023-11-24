@@ -158,7 +158,7 @@ lambda: !lambda |-
         int new_target = fsm.input[STOOKLIJN_TARGET]->value + fsm.get_target_offset();
         if(new_target > fsm.input[TEMP_NEW_TARGET]->value){
           new_target = fsm.input[STOOKLIJN_TARGET]->value;
-          fsm.set_new_target(new_target);
+          fsm.set_safe_new_target(new_target);
         }
         break;
       }
@@ -203,7 +203,7 @@ lambda: !lambda |-
           int new_target = fsm.input[STOOKLIJN_TARGET]->value+fsm.get_target_offset();
           if((fsm.input[TRACKING_VALUE]->value-new_target) >= fsm.hysteresis) new_target = (fsm.input[TRACKING_VALUE]->value-fsm.hysteresis) + 1;
           if(new_target > fsm.input[STOOKLIJN_TARGET]->value+fsm.max_overshoot) new_target = fsm.input[STOOKLIJN_TARGET]->value+fsm.max_overshoot;
-          fsm.set_new_target(new_target);
+          fsm.set_safe_new_target(new_target);
         }
         break;
       }
@@ -392,7 +392,7 @@ lambda: !lambda |-
         //4: We are operating at target, are we modulating?
         if(fsm.compressor_modulation() && fsm.input[TEMP_NEW_TARGET]->value < fsm.input[STOOKLIJN_TARGET]->value+3 && id(change_target_stall).state){
           //raise target above stooklijn target to stop modulation
-          fsm.set_new_target(min(fsm.input[STOOKLIJN_TARGET]->value+3,fsm.input[TRACKING_VALUE]->value + 3));
+          fsm.set_safe_new_target(min(fsm.input[STOOKLIJN_TARGET]->value+3,fsm.input[TRACKING_VALUE]->value + 3));
           ESP_LOGD(fsm.state_name(), "Modulating, raising target, pendel_target: %f",fsm.input[TEMP_NEW_TARGET]->value);
           break;
         }

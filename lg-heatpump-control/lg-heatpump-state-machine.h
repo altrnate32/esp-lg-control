@@ -85,7 +85,6 @@
         void toggle_silent_mode();
         void set_silent_after_defrost();
         int get_target_offset();
-        void set_new_target(float new_target);
         void set_safe_new_target(float new_target);
         void start_events();
         void add_event(input_types ev);
@@ -559,12 +558,6 @@
     if(input[OAT]->value >= 10) return -3;
     if(input[OAT]->value >= id(oat_silent_always_on).state) return -2;
     return -1;
-  }
-  void state_machine_class::set_new_target(float new_target){
-    //TODO check for multiple target changes during run
-    if(new_target != input[TEMP_NEW_TARGET]->value){
-      input[TEMP_NEW_TARGET]->receive_value(new_target);
-    } 
   }
   void state_machine_class::set_safe_new_target(float new_target){
     //set a target that is not below tracking_value - 3
