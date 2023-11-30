@@ -79,6 +79,7 @@
         void heat(bool mode);
         void external_pump(bool mode);
         void backup_heat(bool mode,bool temp_limit_trigger = false);
+        bool get_backup_heat_temp_limit_trigger();
         void boost(bool mode);
         void toggle_boost();
         void silent_mode(bool mode);
@@ -417,6 +418,9 @@
   //***************************************************************
   //*******************Backup Heat*********************************
   //***************************************************************
+  bool state_machine_class::get_backup_heat_temp_limit_trigger(){
+    return backup_heat_temp_limit_trigger;
+  }
   void state_machine_class::backup_heat(bool mode,bool temp_limit_trigger){
     if(mode){
       //relay heat must be on, otherwise it is an invalid request

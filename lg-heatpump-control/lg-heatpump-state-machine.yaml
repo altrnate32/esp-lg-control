@@ -231,6 +231,9 @@ lambda: !lambda |-
         //check low TEMP (for backup_heat_always_on)
         if(fsm.check_low_temp_trigger() && fsm.input[BACKUP_HEAT]->seconds_since_change() > (15*60)) {
           fsm.backup_heat(true,true);
+        } else if(!fsm.get_backup_heat_temp_limit_trigger()){
+          //backup heat is not on due to low temp, no reason for it to be on
+          fsm.backup_heat(false);
         }
 
         //check if we are running on the actual target
@@ -263,7 +266,7 @@ lambda: !lambda |-
           ESP_LOGD(fsm.state_name(),"New state will be stall. target: %f stooklijn_target: %f delta: %f pred_20_delta_5: %f pred_20_delta_10: %f",fsm.input[TEMP_NEW_TARGET]->value,fsm.input[STOOKLIJN_TARGET]->value,fsm.delta,fsm.pred_20_delta_5,fsm.pred_20_delta_10);
           fsm.state_transition(STALL);
           break;
-        } //else status quo       
+        } //else status quo
         break;
       }
       case OVERSHOOT: {
