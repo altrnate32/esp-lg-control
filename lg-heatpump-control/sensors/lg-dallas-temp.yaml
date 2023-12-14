@@ -50,7 +50,7 @@ sensor:
     name: "WP Supply Temperature"
     id: wp_out_temp
     filters:
-      - offset: 0.5
+      - offset: 0.2
     icon: mdi:thermometer-chevron-up
   - platform: template
     name: "Rounded WP Supply Temperature"
@@ -66,7 +66,7 @@ sensor:
     name: "Buffer Top Supply Temperature"
     id: buffer_top_supply_temp
     filters:
-      - offset: 2.4
+      - offset: 2.7
     icon: mdi:alpha-t-circle-outline
   - platform: template
     name: "Rounded Buffer Top Supply Temperature"
@@ -83,7 +83,7 @@ sensor:
     id: buffer_top_temp
     icon: mdi:fridge-top
     filters:
-      - offset: -0.8
+      - offset: -0.3
   - platform: template
     name: "Rounded Buffer Top Temperature"
     id: rounded_buffer_top_temp
@@ -98,7 +98,7 @@ sensor:
     name: "CV Supply Temperature"
     id: cv_supply_temp
     filters:
-      - offset: 0.8
+      - offset: 0.7
     icon: mdi:radiator
   - platform: template
     name: "Rounded CV Supply Temperature"
@@ -114,7 +114,7 @@ sensor:
     name: "CV Return Temperature"
     id: cv_return_temp
     filters:
-      - offset: 0.6
+      - offset: 0.5
     icon: mdi:radiator-disabled
   - platform: template
     name: "Rounded CV Return Temperature"
@@ -130,7 +130,7 @@ sensor:
     id: buffer_bottom_supply_temp
     name: "Buffer Bottom Supply Temperature"
     filters:
-      - offset: 2.0
+      - offset: 4.0
     icon: mdi:alpha-t-circle-outline
   - platform: template
     name: "Rounded Buffer Bottom Supply Temperature"
@@ -147,7 +147,7 @@ sensor:
     id: buffer_bottom_temp
     icon: mdi:fridge-bottom
     filters:
-      - offset: 0.0
+      - offset: 0.4
   - platform: template
     name: "Rounded Buffer Bottom Temperature"
     id: rounded_buffer_bottom_temp
@@ -162,7 +162,7 @@ sensor:
     name: "WP Return Temperature"
     id: wp_return_temp
     filters:
-      - offset: 4.1
+      - offset: 3.6
     icon: mdi:alpha-t-circle-outline
   - platform: template
     name: "Rounded WP Return Temperature"
@@ -173,3 +173,12 @@ sensor:
       return (float)(floor((id(wp_return_temp).state*2)+0.5)/2);
     update_interval: 30s
     icon: mdi:alpha-t-circle-outline
+  - platform: template
+    name: "CV Delta T"
+    id: cv_delta_t
+    unit_of_measurement: "K"
+    accuracy_decimals: 1
+    lambda: |-
+      return (float)(id(cv_supply_temp).state-id(cv_return_temp).state);
+    update_interval: 30s
+    icon: mdi:delta

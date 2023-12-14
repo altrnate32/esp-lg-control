@@ -140,7 +140,7 @@ sensor:
     register_type: read
     address: 7
     unit_of_measurement: "°C"
-    value_type: U_WORD
+    value_type: S_WORD
     accuracy_decimals: 1
     filters:
       - multiply: 0.1
@@ -295,7 +295,7 @@ sensor:
   - platform: template
     name: "Delta T"
     id: wp_delta_t
-    unit_of_measurement: "°C"
+    unit_of_measurement: "K"
     accuracy_decimals: 1
     lambda: |-
       return (float)(id(corrected_water_temp_aanvoer).state-id(corrected_water_temp_retour).state); 
@@ -325,7 +325,7 @@ sensor:
     unit_of_measurement: "°C"
     accuracy_decimals: 1
     lambda: |-
-      return (float)(id(water_temp_aanvoer).state-0.2); 
+      return (float)(id(water_temp_aanvoer).state+0.5); 
     update_interval: 30s
     icon: mdi:thermometer-chevron-up
   - platform: template
