@@ -214,7 +214,7 @@
     input[COMPRESSOR]->receive_state(id(compressor_running).state); //is the compressor running
     input[SWW_RUN]->receive_state(id(sww_heating).state); //is the domestic hot water run active
     input[DEFROST_RUN]->receive_state(id(defrosting).state); //is defrost active
-    input[OAT]->receive_value(round(id(buiten_temp).state)); //outside air temperature
+    input[OAT]->receive_value(round(id(filtered_oat).state)); //outside air temperature
     if(input[OAT]->has_flag() || update_stooklijn_bool) input[STOOKLIJN_TARGET]->receive_value(calculate_stooklijn()); //stooklijn target
     //Set to value that anti-pendel script will track (outlet/inlet) (recommend inlet)
     input[TRACKING_VALUE]->receive_value(floor(id(water_temp_aanvoer).state));
@@ -295,7 +295,7 @@
     if(oat_value > id(stooklijn_max_oat).state) oat_value = id(stooklijn_max_oat).state;
     else if(oat_value < id(stooklijn_min_oat).state) oat_value = id(stooklijn_min_oat).state;
     float C = (id(stooklijn_curve).state*0.001)*pow((oat_value-id(stooklijn_max_oat).state),2);
-    new_stooklijn_target = (int)floor( (Z * (id(stooklijn_max_oat).state-oat_value)) + id(stooklijn_min_wtemp).state + C);
+    new_stooklijn_target = (int)round( (Z * (id(stooklijn_max_oat).state-oat_value)) + id(stooklijn_min_wtemp).state + C);
     //Add stooklijn offset
     new_stooklijn_target = new_stooklijn_target + id(wp_stooklijn_offset).state;
     //Add boost offset

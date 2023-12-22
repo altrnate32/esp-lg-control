@@ -175,14 +175,25 @@ sensor:
       - sliding_window_moving_average:
           window_size: 60
           send_every: 30
-    on_value:
-      then:
-        - lambda: !lambda |-
-            static float prev_oat = -100.0;
-            if (abs(round(x) - round(prev_oat)) > 0.1) {
-              fsm.update_stooklijn();
-              prev_oat = x;
-            }
+  - platform: template
+    name: "Filtered OAT"
+    id: filtered_oat
+    unit_of_measurement: "°C"
+    accuracy_decimals: 1
+    lambda: |-
+      static float prev_oat = -100.0;
+      float new_oat = floor(id(buiten_temp).state);
+      if(new_oat - prev_oat > 0.5) {
+        fsm.update_stooklijn();
+        prev_oat = new_oat;
+      }
+      return new_oat;
+    update_interval: 60s
+    filters:
+      - or:
+        - throttle: 90min
+        - delta: 2.0
+    icon: mdi:weather-cloudy
   - platform: modbus_controller
     modbus_controller_id: lg
     name: "Pipe in Temp"
@@ -218,16 +229,18 @@ sensor:
       - multiply: 0.1
   - platform: modbus_controller
     modbus_controller_id: lg
-    name: "Fan RPM"
-    id: temp19
+    name: "Compressor Temp"
+    id: compressor_temp
     register_type: read
     address: 19
-    unit_of_measurement: "rpm"
+    unit_of_measurement: "°C"
     value_type: S_WORD
-    accuracy_decimals: 0
+    filters:
+      - multiply: 0.1
+    accuracy_decimals: 1
   - platform: modbus_controller
     modbus_controller_id: lg
-    name: "Condenser Temp"
+    name: "Condensor Temp"
     id: condensor_temp
     register_type: read
     address: 20
