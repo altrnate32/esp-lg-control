@@ -102,7 +102,7 @@ number:
     max_value: 60
     step: 1
     restore_value: yes
-    initial_value: 45
+    initial_value: 44
     unit_of_measurement: "°C"
     optimistic: true
     icon: mdi:waves-arrow-right
@@ -117,7 +117,7 @@ number:
     max_value: 40
     step: 1
     restore_value: yes
-    initial_value: 26
+    initial_value: 24
     unit_of_measurement: "°C"
     optimistic: true
     icon: mdi:waves-arrow-left
@@ -132,7 +132,7 @@ number:
     max_value: 20
     step: 1
     restore_value: yes
-    initial_value: 14
+    initial_value: 20
     unit_of_measurement: "°C"
     optimistic: true
     icon: mdi:waves-arrow-left
