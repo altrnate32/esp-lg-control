@@ -309,7 +309,9 @@ sensor:
   - platform: template
     name: "Stooklijn Watertemp Target"
     id: watertemp_target
+    device_class: "temperature"
     unit_of_measurement: "°C"
+    state_class: "measurement"
     update_interval: never
     icon: mdi:home-thermometer-outline
   - platform: wifi_signal

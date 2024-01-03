@@ -11,7 +11,9 @@ sensor:
   - platform: template
     name: "Rounded WPB Bottom Temperature"
     id: rounded_wpb_bottom_temperature
+    device_class: "temperature"
     unit_of_measurement: "°C"
+    state_class: "measurement"
     accuracy_decimals: 1
     lambda: |-
       return (float)(floor((id(wpb_bottom_temperature).state*2)+0.5)/2);
@@ -21,11 +23,16 @@ sensor:
     address: 0xb9012211506ebf28
     name: "WPB Top Temperature"
     id: wpb_top_temperature
+    device_class: "temperature"
+    unit_of_measurement: "°C"
+    state_class: "measurement"
     icon: mdi:arrow-collapse-up
   - platform: template
     name: "Rounded WPB Top Temperature"
     id: rounded_wpb_top_temperature
+    device_class: "temperature"
     unit_of_measurement: "°C"
+    state_class: "measurement"
     accuracy_decimals: 1
     lambda: |-
       return (float)(floor((id(wpb_top_temperature).state*2)+0.5)/2);
@@ -34,12 +41,17 @@ sensor:
   - platform: dallas
     address: 0xbb03059497154628
     id: sww_supply_temperature
+    device_class: "temperature"
+    unit_of_measurement: "°C"
+    state_class: "measurement"
     name: "SWW Supply Temperature"
     icon: mdi:faucet
   - platform: template
     name: "Rounded SWW Supply Temperature"
     id: rounded_sww_supply_temperature
+    device_class: "temperature"
     unit_of_measurement: "°C"
+    state_class: "measurement"
     accuracy_decimals: 1
     lambda: |-
       return (float)(floor((id(sww_supply_temperature).state*2)+0.5)/2);
@@ -49,13 +61,18 @@ sensor:
     address: 0x0a03049497049628
     name: "WP Supply Temperature"
     id: wp_out_temp
+    device_class: "temperature"
+    unit_of_measurement: "°C"
+    state_class: "measurement"
     filters:
       - offset: 0.2
     icon: mdi:thermometer-chevron-up
   - platform: template
     name: "Rounded WP Supply Temperature"
     id: rounded_wpb_out_temp
+    device_class: "temperature"
     unit_of_measurement: "°C"
+    state_class: "measurement"
     accuracy_decimals: 1
     lambda: |-
       return (float)(floor((id(wp_out_temp).state*2)+0.5)/2);
@@ -65,13 +82,18 @@ sensor:
     address: 0xd10122112fc5ee28
     name: "Buffer Top Supply Temperature"
     id: buffer_top_supply_temp
+    device_class: "temperature"
+    unit_of_measurement: "°C"
+    state_class: "measurement"
     filters:
       - offset: 2.7
     icon: mdi:alpha-t-circle-outline
   - platform: template
     name: "Rounded Buffer Top Supply Temperature"
     id: rounded_buffer_top_supply_temp
+    device_class: "temperature"
     unit_of_measurement: "°C"
+    state_class: "measurement"
     accuracy_decimals: 1
     lambda: |-
       return (float)(floor((id(buffer_top_supply_temp).state*2)+0.5)/2);
@@ -80,6 +102,9 @@ sensor:
   - platform: dallas
     address: 0xe101221102a46b28
     name: "Buffer Top Temperature"
+    device_class: "temperature"
+    unit_of_measurement: "°C"
+    state_class: "measurement"
     id: buffer_top_temp
     icon: mdi:fridge-top
     filters:
@@ -87,7 +112,9 @@ sensor:
   - platform: template
     name: "Rounded Buffer Top Temperature"
     id: rounded_buffer_top_temp
+    device_class: "temperature"
     unit_of_measurement: "°C"
+    state_class: "measurement"
     accuracy_decimals: 1
     lambda: |-
       return (float)(floor((id(buffer_top_temp).state*2)+0.5)/2);
@@ -97,13 +124,18 @@ sensor:
     address: 0x38030794971a4a28
     name: "CV Supply Temperature"
     id: cv_supply_temp
+    device_class: "temperature"
+    unit_of_measurement: "°C"
+    state_class: "measurement"
     filters:
       - offset: 0.7
     icon: mdi:radiator
   - platform: template
     name: "Rounded CV Supply Temperature"
     id: rounded_cv_supply_temp
+    device_class: "temperature"
     unit_of_measurement: "°C"
+    state_class: "measurement"
     accuracy_decimals: 1
     lambda: |-
       return (float)(floor((id(cv_supply_temp).state*2)+0.5)/2);
@@ -113,13 +145,18 @@ sensor:
     address: 0x4503059497174a28
     name: "CV Return Temperature"
     id: cv_return_temp
+    device_class: "temperature"
+    unit_of_measurement: "°C"
+    state_class: "measurement"
     filters:
       - offset: 0.5
     icon: mdi:radiator-disabled
   - platform: template
     name: "Rounded CV Return Temperature"
     id: rounded_cv_return_temp
+    device_class: "temperature"
     unit_of_measurement: "°C"
+    state_class: "measurement"
     accuracy_decimals: 1
     lambda: |-
       return (float)(floor((id(cv_return_temp).state*2)+0.5)/2);
@@ -135,7 +172,9 @@ sensor:
   - platform: template
     name: "Rounded Buffer Bottom Supply Temperature"
     id: rounded_buffer_bottom_supply_temp
+    device_class: "temperature"
     unit_of_measurement: "°C"
+    state_class: "measurement"
     accuracy_decimals: 1
     lambda: |-
       return (float)(floor((id(buffer_bottom_supply_temp).state*2)+0.5)/2);
@@ -145,13 +184,18 @@ sensor:
     address: 0xd7000801c04e3210
     name: "Buffer Bottom Temperature"
     id: buffer_bottom_temp
+    device_class: "temperature"
+    unit_of_measurement: "°C"
+    state_class: "measurement"
     icon: mdi:fridge-bottom
     filters:
       - offset: 0.4
   - platform: template
     name: "Rounded Buffer Bottom Temperature"
     id: rounded_buffer_bottom_temp
+    device_class: "temperature"
     unit_of_measurement: "°C"
+    state_class: "measurement"
     accuracy_decimals: 1
     lambda: |-
       return (float)(floor((id(buffer_bottom_temp).state*2)+0.5)/2);
@@ -161,13 +205,18 @@ sensor:
     address: 0x2403069794065c28
     name: "WP Return Temperature"
     id: wp_return_temp
+    device_class: "temperature"
+    unit_of_measurement: "°C"
+    state_class: "measurement"
     filters:
       - offset: 3.6
     icon: mdi:alpha-t-circle-outline
   - platform: template
     name: "Rounded WP Return Temperature"
     id: rounded_wp_return_temp
+    device_class: "temperature"
     unit_of_measurement: "°C"
+    state_class: "measurement"
     accuracy_decimals: 1
     lambda: |-
       return (float)(floor((id(wp_return_temp).state*2)+0.5)/2);
@@ -176,6 +225,8 @@ sensor:
   - platform: template
     name: "CV Delta T"
     id: cv_delta_t
+    device_class: "temperature"
+    state_class: "measurement"
     unit_of_measurement: "K"
     accuracy_decimals: 1
     lambda: |-

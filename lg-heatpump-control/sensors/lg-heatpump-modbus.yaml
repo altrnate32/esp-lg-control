@@ -94,7 +94,9 @@ sensor:
     id: water_temp_retour
     register_type: read
     address: 2
+    device_class: "temperature"
     unit_of_measurement: "°C"
+    state_class: "measurement"
     value_type: S_WORD
     accuracy_decimals: 1
     filters:
@@ -106,7 +108,9 @@ sensor:
     id: water_temp_aanvoer
     register_type: read
     address: 3
+    device_class: "temperature"
     unit_of_measurement: "°C"
+    state_class: "measurement"
     value_type: S_WORD
     accuracy_decimals: 1
     filters:
@@ -118,7 +122,9 @@ sensor:
     id: sww_temp
     register_type: read
     address: 5
+    device_class: "temperature"
     unit_of_measurement: "°C"
+    state_class: "measurement"
     value_type: U_WORD
     accuracy_decimals: 1
     filters:
@@ -127,7 +133,9 @@ sensor:
   - platform: template
     name: "Rounded SWW Temperature"
     id: rounded_sww_temp
+    device_class: "temperature"
     unit_of_measurement: "°C"
+    state_class: "measurement"
     accuracy_decimals: 1
     lambda: |-
       return (float)(floor((id(sww_temp).state*2)+0.5)/2);
@@ -139,7 +147,9 @@ sensor:
     id: binnen_temp
     register_type: read
     address: 7
+    device_class: "temperature"
     unit_of_measurement: "°C"
+    state_class: "measurement"
     value_type: S_WORD
     accuracy_decimals: 1
     filters:
@@ -151,6 +161,8 @@ sensor:
     id: current_flow_rate
     register_type: read
     address: 8
+    device_class: "water"
+    state_class: "measurement"
     unit_of_measurement: "L/m"
     value_type: U_WORD
     accuracy_decimals: 1
@@ -166,7 +178,9 @@ sensor:
     id: buiten_temp
     register_type: read
     address: 12
+    device_class: "temperature"
     unit_of_measurement: "°C"
+    state_class: "measurement"
     value_type: S_WORD
     accuracy_decimals: 1
     icon: mdi:weather-cloudy
@@ -178,7 +192,9 @@ sensor:
   - platform: template
     name: "Filtered OAT"
     id: filtered_oat
+    device_class: "temperature"
     unit_of_measurement: "°C"
+    state_class: "measurement"
     accuracy_decimals: 1
     lambda: |-
       static float prev_oat = -100.0;
@@ -200,7 +216,9 @@ sensor:
     id: temp16
     register_type: read
     address: 16
+    device_class: "temperature"
     unit_of_measurement: "°C"
+    state_class: "measurement"
     value_type: S_WORD
     accuracy_decimals: 1
     filters:
@@ -211,7 +229,9 @@ sensor:
     id: temp17
     register_type: read
     address: 17
+    device_class: "temperature"
     unit_of_measurement: "°C"
+    state_class: "measurement"
     value_type: S_WORD
     accuracy_decimals: 1
     filters:
@@ -222,7 +242,9 @@ sensor:
     id: temp18
     register_type: read
     address: 18
+    device_class: "temperature"
     unit_of_measurement: "°C"
+    state_class: "measurement"
     value_type: S_WORD
     accuracy_decimals: 1
     filters:
@@ -233,7 +255,9 @@ sensor:
     id: compressor_temp
     register_type: read
     address: 19
+    device_class: "temperature"
     unit_of_measurement: "°C"
+    state_class: "measurement"
     value_type: S_WORD
     filters:
       - multiply: 0.1
@@ -244,7 +268,9 @@ sensor:
     id: condensor_temp
     register_type: read
     address: 20
+    device_class: "temperature"
     unit_of_measurement: "°C"
+    state_class: "measurement"
     value_type: S_WORD
     accuracy_decimals: 1
     filters:
@@ -258,6 +284,8 @@ sensor:
     address: 22
     value_type: U_WORD
     accuracy_decimals: 0
+    device_class: "pressure"
+    state_class: "measurement"
     unit_of_measurement: "mbar"
     icon: mdi:meter-electric-outline
   - platform: modbus_controller
@@ -268,6 +296,8 @@ sensor:
     address: 23
     value_type: U_WORD
     accuracy_decimals: 0
+    device_class: "pressure"
+    state_class: "measurement"
     unit_of_measurement: "mbar"
   - platform: modbus_controller
     modbus_controller_id: lg
@@ -275,6 +305,8 @@ sensor:
     id: compressor_rpm
     register_type: read
     address: 24
+    device_class: "frequency"
+    state_class: "measurement"
     unit_of_measurement: "Hz"
     value_type: U_WORD
     accuracy_decimals: 0
@@ -285,7 +317,9 @@ sensor:
     id: doel_temp
     register_type: holding
     address: 2
+    device_class: "temperature"
     unit_of_measurement: "°C"
+    state_class: "measurement"
     value_type: U_WORD
     accuracy_decimals: 1
     skip_updates: 3
@@ -298,7 +332,9 @@ sensor:
     id: sww_target
     register_type: holding
     address: 8
+    device_class: "temperature"
     unit_of_measurement: "°C"
+    state_class: "measurement"
     value_type: U_WORD
     accuracy_decimals: 1
     skip_updates: 3
@@ -308,6 +344,8 @@ sensor:
   - platform: template
     name: "Delta T"
     id: wp_delta_t
+    device_class: "temperature"
+    state_class: "measurement"
     unit_of_measurement: "K"
     accuracy_decimals: 1
     lambda: |-
@@ -317,7 +355,9 @@ sensor:
   - platform: template
     name: "Corrected retour"
     id: corrected_water_temp_retour
+    device_class: "temperature"
     unit_of_measurement: "°C"
+    state_class: "measurement"
     accuracy_decimals: 1
     lambda: |-
       return (float)(id(water_temp_retour).state-0.4); 
@@ -326,7 +366,9 @@ sensor:
   - platform: template
     name: "Rounded Corrected retour"
     id: rounded_corrected_water_temp_retour
+    device_class: "temperature"
     unit_of_measurement: "°C"
+    state_class: "measurement"
     accuracy_decimals: 1
     lambda: |-
       return (float)(floor((id(corrected_water_temp_retour).state*2)+0.5)/2);
@@ -335,7 +377,9 @@ sensor:
   - platform: template
     name: "Corrected aanvoer"
     id: corrected_water_temp_aanvoer
+    device_class: "temperature"
     unit_of_measurement: "°C"
+    state_class: "measurement"
     accuracy_decimals: 1
     lambda: |-
       return (float)(id(water_temp_aanvoer).state+0.5); 
@@ -344,7 +388,9 @@ sensor:
   - platform: template
     name: "Rounded Corrected aanvoer"
     id: rounded_corrected_water_temp_aanvoer
+    device_class: "temperature"
     unit_of_measurement: "°C"
+    state_class: "measurement"
     accuracy_decimals: 1
     lambda: |-
       return (float)(floor((id(corrected_water_temp_aanvoer).state*2)+0.5)/2);
