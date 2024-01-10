@@ -1,7 +1,10 @@
+## Hardware: Recommend to use this board:
+[Github Link](https://github.com/johanneswilkens/Heat-Pump-Controller-PCB)
+
 ## State of main branch: 
-Current state of main: tested and stable  
-Tested for a couple of weeks seems pretty stable  
-Remains experimental (so use at your own risk) but functions good in my setup  
+Current state of main: new feature (switch of HP when backup heat runs) not fully tested  
+Seems to run fine, but not tested all cases yet, so please report.
+Remains experimental (so use at your own risk) but functions good in my setup
 
 ## Enable/Disable external thermostat/relays:
 If you are not using an external thermostat/pump/backup_heater choose the correct packages in esp-lg-control.yaml (lines 9-19).  
@@ -30,11 +33,12 @@ Tested with 3-phase 14kW U34 version. So propably works at least with 12-14-16kW
 This is a hobby project. I share this to allow other people to pick up ideas and contribute. All assistance is welcome. I will not provide support, so use at your own risk. And make sure you know what you are doing, by using this script it is possible that your unit stops functioning or breaks and you could electrocute yourself.
 
 ## Whats new:
-Update: New control algoritm
-Update: Changed back to monitoring supply temp, after much tweaking found out this works better as modulation is more agressive
-Update: Rewrote code to simple finite state machine. Gives more stability and is easier to debug
-Update: Changed ant-pendel algoritm to monitor return temp. After much experimenting I have the feeling that the LG controller modulates on the return temp, not the supply temp.
-Update: Ditched the PID controller. Switched back to an (improved) basic algorithm.
+* Update 10-01-2024: Added new feature to manually or automatically disable the heatpump and run the backup heater. Usefull if you have a hybrid setup with gas/oil heater. This also enables you to create a (HA/Node-red) automation to 'manually' disable the heatpump and run the backup heater based on electricity/gas price and COP.
+* Update: New control algoritm
+* Update: Changed back to monitoring supply temp, after much tweaking found out this works better as modulation is more agressive
+* Update: Rewrote code to simple finite state machine. Gives more stability and is easier to debug
+* Update: Changed ant-pendel algoritm to monitor return temp. After much experimenting I have the feeling that the LG controller modulates on the return temp, not the supply temp.
+* Update: Ditched the PID controller. Switched back to an (improved) basic algorithm.
 
 ~~Experimental (simple) PID controller. It works, but I am not sure if it really addes value compared to the simple algoritm. It fixes some issues (with HP not starting, because target is set too low). But there are other ways to fix that.
 But it is a lot of fun to experiment with.~~
@@ -44,6 +48,8 @@ But it is a lot of fun to experiment with.~~
 
 ## Hardware
 Works with any ESP chip/board supported by ESPHome.
+
+**Recommend to use the board designed by johanneswilkens:** [Github Link](https://github.com/johanneswilkens/Heat-Pump-Controller-PCB)
 
 In this specific config four relays are connected to GPIO Pins. These relays actuate the external thermostat connections on the LG. This config is optional.
 
