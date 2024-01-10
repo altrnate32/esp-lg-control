@@ -50,6 +50,7 @@ lambda: !lambda |-
         if(fsm.get_run_time() < 90 || isnan(id(buiten_temp).state) || isnan(id(water_temp_aanvoer).state) || isnan(id(water_temp_retour).state)) break;
         //after timeout
         fsm.receive_inputs();
+        fsm.proces_selects();
         //check for fast_start
         //the 3 places where thermostat event does not lead to a switch off. Therefore not handled through check_change_events       
         if(fsm.input[THERMOSTAT]->state) {
@@ -116,6 +117,10 @@ lambda: !lambda |-
         }
         //enforce config
         fsm.backup_heat(false);
+
+        fsm.start_events();
+        fsm.add_event(BACKUP_ONLY_SWITCH);
+        if(fsm.check_change_events()) break;
         
         //three minutes delay to allow pump to run and values to stabilise 
         if(fsm.seconds_since_state_start() < (3*60)) break;
@@ -147,6 +152,7 @@ lambda: !lambda |-
         fsm.add_event(DEFROST_RUN);
         fsm.add_event(THERMOSTAT);
         fsm.add_event(RELAY_HEAT);
+        fsm.add_event(BACKUP_ONLY_SWITCH);
         if(fsm.check_change_events()) break;
                 
         if(fsm.input[COMPRESSOR]->state){
@@ -181,6 +187,7 @@ lambda: !lambda |-
         fsm.add_event(THERMOSTAT);
         fsm.add_event(RELAY_HEAT);
         fsm.add_event(COMPRESSOR);
+        fsm.add_event(BACKUP_ONLY_SWITCH);
         if(fsm.check_change_events()) break;
 
         //check how far we are in the run
@@ -226,6 +233,7 @@ lambda: !lambda |-
         fsm.add_event(COMPRESSOR);
         fsm.add_event(EMERGENCY);
         fsm.add_event(BACKUP_HEAT);
+        fsm.add_event(BACKUP_ONLY_SWITCH);
         if(fsm.check_change_events()) break;
         
         //check low TEMP (for backup_heat_always_on)
@@ -288,6 +296,7 @@ lambda: !lambda |-
         fsm.add_event(THERMOSTAT);
         fsm.add_event(RELAY_HEAT);
         fsm.add_event(COMPRESSOR);
+        fsm.add_event(BACKUP_ONLY_SWITCH);
         if(fsm.check_change_events()) break;
 
         if(fsm.delta < 1 && fsm.pred_20_delta_5 < 1.5 && fsm.pred_20_delta_10 < 1.5 ){
@@ -345,6 +354,7 @@ lambda: !lambda |-
         fsm.add_event(COMPRESSOR);
         fsm.add_event(EMERGENCY);
         fsm.add_event(BACKUP_HEAT);
+        fsm.add_event(BACKUP_ONLY_SWITCH);
         if(fsm.check_change_events()) break;
         
         //check low temp (for backup_heat_always_on)
@@ -436,6 +446,7 @@ lambda: !lambda |-
         fsm.add_event(THERMOSTAT);
         fsm.add_event(RELAY_HEAT);
         fsm.add_event(BACKUP_HEAT);
+        fsm.add_event(BACKUP_ONLY_SWITCH);
         if(fsm.check_change_events()) break;
         
         //check if stooklijn value changed
@@ -549,7 +560,7 @@ lambda: !lambda |-
         //DESCRIPTION: Shutdown and let pump run for x minutes
         //INTERPRETS INPUTS: NONE
         //RECEIVES EVENTS: THERMOSTAT; SWW_RUN
-        //STATE TRANSITIONS: IDLE; sww
+        //STATE TRANSITIONS: IDLE; SWW;
         //ENFORCE CONFIG: BACKUP_HEAT OFF; RELAY_HEAT OFF; BOOST_OFF
         //SPECIAL: none
         if(!fsm.entry_done){
@@ -575,9 +586,30 @@ lambda: !lambda |-
         fsm.state_transition(IDLE);
         break;
       }
+      case BACKUP_ONLY:{
+        //DESCRIPTION: Backup heat on, Heatpump OFF
+        //INTERPRETS INPUTS: NONE
+        //RECEIVES EVENTS: THERMOSTAT; BACKUP_ONLY SWITCH
+        //STATE TRANSITIONS: AFTERRUN;
+        //ENFORCE CONFIG: BACKUP_HEAT ON; RELAY_HEAT OFF; BOOST OFF
+        //SPECIAL: none
+        //we enter this mode either automatically (low temp) or when the switch backup_heat_only is activated
+        //leave this mode also automatically (temp improved) or when the switch is switched off
+        //check events and enforce config
+        fsm.external_pump(true);
+        fsm.backup_heat(true);
+        fsm.heat(false);
+        fsm.boost(false);
+        fsm.start_events();
+        fsm.add_event(THERMOSTAT);
+        fsm.add_event(BACKUP_ONLY_SWITCH);
+        if(fsm.check_change_events()) break;
+        break;
+      }
       case NONE:{
         ESP_LOGE(fsm.state_name(), "ERROR: State is none");
         id(controller_info).publish_state("ERROR: state = NONE");
+        break;
       }
     }
 

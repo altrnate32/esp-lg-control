@@ -1,5 +1,5 @@
-  enum states {NONE,INIT,IDLE,START,STARTING,STABILIZE,RUN,OVERSHOOT,STALL,WAIT,SWW,DEFROST,AFTERRUN};
-  enum input_types {THERMOSTAT,THERMOSTAT_SENSOR,COMPRESSOR,SWW_RUN,DEFROST_RUN,OAT,STOOKLIJN_TARGET,TRACKING_VALUE,BOOST,BACKUP_HEAT,EXTERNAL_PUMP,RELAY_HEAT,TEMP_NEW_TARGET,WP_PUMP,SILENT_MODE,EMERGENCY};
+  enum states {NONE,INIT,IDLE,START,STARTING,STABILIZE,RUN,OVERSHOOT,STALL,WAIT,SWW,DEFROST,AFTERRUN,BACKUP_ONLY};
+  enum input_types {THERMOSTAT,THERMOSTAT_SENSOR,COMPRESSOR,SWW_RUN,DEFROST_RUN,OAT,STOOKLIJN_TARGET,TRACKING_VALUE,BOOST,BACKUP_HEAT,EXTERNAL_PUMP,RELAY_HEAT,TEMP_NEW_TARGET,WP_PUMP,SILENT_MODE,EMERGENCY,BACKUP_ONLY_SWITCH};
   struct input_struct {
     bool state = false;
     bool prev_state = false;
@@ -33,6 +33,7 @@
         bool backup_heat_sww = false;
         bool backup_heat_defrost = false;
         bool backup_heat_lowtemp = false;
+        bool backup_heat_only_enabled = false;
         //automatic_boost select
         bool boost_defrost = false;
         bool boost_sww = false;
@@ -40,7 +41,7 @@
         bool silent_on_after_defrost = false;
         uint_fast32_t silent_after_defrost_start_time;
       public:
-        input_struct* input[16]; //list of all inputs
+        input_struct* input[17]; //list of all inputs
         bool entry_done = false;
         //default values, change these if you want
         int boost_offset = 2; //number of degrees to raise stooklijn in boost mode
@@ -134,6 +135,7 @@
     input[WP_PUMP] = new input_struct(&run_time_value);
     input[SILENT_MODE] = new input_struct(&run_time_value);
     input[EMERGENCY] = new input_struct(&run_time_value);
+    input[BACKUP_ONLY_SWITCH] = new input_struct(&run_time_value);
   }
   state_machine_class::~ state_machine_class(){
     delete input[THERMOSTAT];
@@ -152,6 +154,7 @@
     delete input[WP_PUMP];
     delete input[SILENT_MODE];
     delete input[EMERGENCY];
+    delete input[BACKUP_ONLY_SWITCH];
   }
   void state_machine_class::update_stooklijn(){
     update_stooklijn_bool = true;
@@ -181,12 +184,12 @@
   }
   const char * state_machine_class::state_friendly_name(states stt){
     if(stt == NONE) stt = current_state;
-    static const std::string state_string_friendly_list[13] = {"None","Initialiseren","Uit","Start","Opstarten","Aan (stabiliseren)","Aan (verwarmen)","Aan (overshoot)","Aan (stall)","Pauze (Uit)","Aan (Warm Water)","Ontdooien","Nadraaien"}; 
+    static const std::string state_string_friendly_list[14] = {"None","Initialiseren","Uit","Start","Opstarten","Aan (stabiliseren)","Aan (verwarmen)","Aan (overshoot)","Aan (stall)","Pauze (Uit)","Aan (Warm Water)","Ontdooien","Nadraaien","Alleen Backup Heat"}; 
     return state_string_friendly_list[stt].c_str();
   }
   const char * state_machine_class::state_name(states stt){
     if(stt == NONE) stt = current_state;
-    static const std::string state_string_list[13] = {"NONE","INIT","IDLE","START","STARTING","STABILIZE","RUN","OVERSHOOT","STALL","WAIT","SWW","DEFROST","AFTERRUN"};
+    static const std::string state_string_list[14] = {"NONE","INIT","IDLE","START","STARTING","STABILIZE","RUN","OVERSHOOT","STALL","WAIT","SWW","DEFROST","AFTERRUN","BACKUP ONLY"};
     return state_string_list[stt].c_str();
   }
   uint_fast32_t state_machine_class::get_run_time(){
@@ -236,7 +239,7 @@
       toggle_boost();
     }
     toggle_silent_mode();
-    if(input[WP_PUMP]->state && state() != SWW && state() != DEFROST){
+    if(input[WP_PUMP]->state && state() != SWW && state() != DEFROST && state() != BACKUP_ONLY){
       //calculate derivative and publish new value
       calculate_derivative(input[TRACKING_VALUE]->value);
     } else if(!input[WP_PUMP]->state && derivative.size() > 0){
@@ -263,6 +266,7 @@
     input[WP_PUMP]->unflag();
     input[SILENT_MODE]->unflag();
     input[EMERGENCY]->unflag();
+    input[BACKUP_ONLY_SWITCH]->unflag();
   }
   //***************************************************************
   //*******************Stooklijn***********************************
@@ -380,8 +384,8 @@
         id(relay_heat).turn_off();
         input[RELAY_HEAT]->receive_state(false);
       }
-      //external pump can remain on, backup heater must be off
-      if(input[BACKUP_HEAT]->state){
+      //external pump can remain on, backup heater must be off, unless BACKUP_ONLY
+      if(input[BACKUP_HEAT]->state && state() != BACKUP_ONLY){
         backup_heat(false);
         ESP_LOGD(state_name(),"Invalid configuration relay_heat off before relay_backup_heat off.");
         id(controller_info).publish_state("Invalid config: heat off before backup_heat");
@@ -423,8 +427,8 @@
   }
   void state_machine_class::backup_heat(bool mode,bool temp_limit_trigger){
     if(mode){
-      //relay heat must be on, otherwise it is an invalid request
-      if(!input[RELAY_HEAT]->state){
+      //relay heat must be on, OR BACKUP_ONLY_SWITCH otherwise it is an invalid request
+      if(!input[RELAY_HEAT]->state && !input[BACKUP_ONLY_SWITCH]->state){
         //do not turn on
         ESP_LOGD(state_name(),"Invalid configuration relay_backup_heat on before relay_heat.");
         id(controller_info).publish_state("ERROR: backup_heat on before heat.");
@@ -435,6 +439,7 @@
             if(!backup_heat_lowtemp) return;
             backup_heat_temp_limit_trigger = true;
             id(controller_info).publish_state("Backup heat on due to low temp");
+            if(backup_heat_only_enabled) state_transition(BACKUP_ONLY);
           } else if(input[SWW_RUN]->state) {
             if(!backup_heat_sww) return;
             id(controller_info).publish_state("Backup heat on due to SWW run");
@@ -444,6 +449,8 @@
           } else if(state() == STALL){
             if(!backup_heat_stall) return;
             id(controller_info).publish_state("Backup heat on due to STALL");
+          } else if(state() == BACKUP_ONLY||input[BACKUP_ONLY_SWITCH]->state){
+            id(controller_info).publish_state("Backup heat on due to BACKUP_HEAT_ONLY");
           } else {
             id(controller_info).publish_state("Backup heat on");
           }
@@ -652,6 +659,19 @@
             id(controller_info).publish_state("Backup heat off due to temperature improvement");
           }
         }
+      } else if(*it == BACKUP_ONLY_SWITCH){
+        if (input[BACKUP_ONLY_SWITCH]->state && state() != BACKUP_ONLY && backup_heat_only_enabled){
+          state_transition(BACKUP_ONLY);
+          id(controller_info).publish_state("Backup heat Only");
+        } else if(state() == BACKUP_ONLY && !input[BACKUP_ONLY_SWITCH]->state){
+          if(input[THERMOSTAT]->state) state_transition(START);
+          else state_transition(AFTERRUN);
+        } else if(backup_heat_temp_limit_trigger && input[OAT]->value > id(backup_heater_always_on_temp).state){
+          //if triggered due to low temp and situation improved (with some hysteresis)
+          input[BACKUP_ONLY_SWITCH]->receive_state(false);
+          if(input[THERMOSTAT]->state) state_transition(START);
+          else state_transition(AFTERRUN);
+        }
       }
     }
     events.clear();
@@ -747,8 +767,24 @@
         backup_heat_lowtemp = true;
       break;
     }
+    index = id(backup_heat_only_mode).active_index();
+    switch(index.value()){
+      case 0:
+        backup_heat_only_enabled = false;
+        input[BACKUP_ONLY_SWITCH]->receive_state(false);
+      break;
+      case 1:
+        backup_heat_only_enabled = true;
+        if(state() == BACKUP_ONLY && !backup_heat_temp_limit_trigger) input[BACKUP_ONLY_SWITCH]->receive_state(false);
+      break;
+      case 2:
+        backup_heat_only_enabled = true;
+        input[BACKUP_ONLY_SWITCH]->receive_state(true);
+      break;
+    }
     ESP_LOGD("proces_selects", "backup_heat stall: %d sww: %d defrost: %d lowtemp: %d",backup_heat_stall, backup_heat_sww, backup_heat_defrost, backup_heat_lowtemp);
     ESP_LOGD("proces_selects", "automatic_boost defrost: %d sww: %d",boost_defrost,boost_sww);
+    ESP_LOGD("proces_selects", "backup_heat_only enabled: %d enable_now: %d",backup_heat_only_enabled,input[BACKUP_ONLY_SWITCH]->state);
   }
   
   //main state machine object
