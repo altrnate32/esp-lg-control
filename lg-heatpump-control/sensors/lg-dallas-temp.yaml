@@ -65,7 +65,10 @@ sensor:
     unit_of_measurement: "°C"
     state_class: "measurement"
     filters:
-      - offset: 0.2
+      - offset: 0.0
+      - calibrate_linear:
+          - 30.0 -> 30.2
+          - 44.6 -> 47
     icon: mdi:thermometer-chevron-up
   - platform: template
     name: "Rounded WP Supply Temperature"
@@ -86,7 +89,10 @@ sensor:
     unit_of_measurement: "°C"
     state_class: "measurement"
     filters:
-      - offset: 2.7
+      - offset: 0.0
+      - calibrate_linear:
+          - 30.0 -> 32.7
+          - 39.3 -> 47
     icon: mdi:alpha-t-circle-outline
   - platform: template
     name: "Rounded Buffer Top Supply Temperature"
@@ -128,7 +134,10 @@ sensor:
     unit_of_measurement: "°C"
     state_class: "measurement"
     filters:
-      - offset: 0.7
+      - offset: 0.0
+      - calibrate_linear:
+          - 30.0 -> 30.7
+          - 42.8 -> 47
     icon: mdi:radiator
   - platform: template
     name: "Rounded CV Supply Temperature"
@@ -149,7 +158,10 @@ sensor:
     unit_of_measurement: "°C"
     state_class: "measurement"
     filters:
-      - offset: 0.5
+      - offset: 0.0
+      - calibrate_linear:
+          - 30.0 -> 30.5
+          - 35.7 -> 39.5
     icon: mdi:radiator-disabled
   - platform: template
     name: "Rounded CV Return Temperature"
@@ -167,7 +179,10 @@ sensor:
     id: buffer_bottom_supply_temp
     name: "Buffer Bottom Supply Temperature"
     filters:
-      - offset: 4.0
+      - offset: 0.0
+      - calibrate_linear:
+          - 30.0 -> 34.0
+          - 37.5 -> 46.0
     icon: mdi:alpha-t-circle-outline
   - platform: template
     name: "Rounded Buffer Bottom Supply Temperature"
@@ -209,7 +224,10 @@ sensor:
     unit_of_measurement: "°C"
     state_class: "measurement"
     filters:
-      - offset: 3.6
+      - offset: 0.0
+      - calibrate_linear:
+          - 30.0 -> 33.6
+          - 35.2 -> 38.8
     icon: mdi:alpha-t-circle-outline
   - platform: template
     name: "Rounded WP Return Temperature"
