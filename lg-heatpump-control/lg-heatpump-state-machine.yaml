@@ -338,7 +338,7 @@ lambda: !lambda |-
         //DESCRIPTION: Logic to raise target to return back to stooklijn_target (and hopefully prevent overshoot)
         //INTERPRETS INPUTS: DELTA; PREDICTIONS
         //RECEIVES EVENTS: SWW_RUN; DEFROST; THERMOSTAT OFF; RELAY_HEAT OFF; COMPRESSOR OFF; EMERGENCY
-        //STATE TRANSITIONS: RUN; WAIT; SWW; DEFROST; AFTERRUN
+        //STATE TRANSITIONS: RUN; WAIT; SWW; DEFROST; AFTERRUN; BACKUP_ONLY
         //ENFORCE CONFIG: NONE
         //SPECIAL: none
         if(!fsm.entry_done){
@@ -432,20 +432,20 @@ lambda: !lambda |-
         //DESCRIPTION: Failed run? The compressor has stopped, but the thermostat is still requesting heat...
         //INTERPRETS INPUTS: NONE
         //RECEIVES EVENTS: SWW_RUN; DEFROST; THERMOSTAT OFF; RELAY_HEAT OFF; COMPRESSOR ON 
-        //STATE TRANSITIONS: RUN; SWW; DEFROST; AFTERRUN
-        //ENFORCE CONFIG: NONE
+        //STATE TRANSITIONS: RUN; SWW; DEFROST; AFTERRUN; BACKUP_ONLY
+        //ENFORCE CONFIG: BACKUP_HEAT OFF
         //SPECIAL: none
         if(!fsm.entry_done){
           id(controller_info).publish_state("Compressor stopped -> Wait");
           fsm.entry_done = true;
         }
         //enforce allowed config
+        fsm.backup_heat(false); //backup heat off, otherwise compressor never restarts
         fsm.start_events();
         fsm.add_event(SWW_RUN);
         fsm.add_event(DEFROST_RUN);
         fsm.add_event(THERMOSTAT);
         fsm.add_event(RELAY_HEAT);
-        fsm.add_event(BACKUP_HEAT);
         fsm.add_event(BACKUP_ONLY_SWITCH);
         if(fsm.check_change_events()) break;
         
