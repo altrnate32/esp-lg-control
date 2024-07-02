@@ -7,14 +7,14 @@ esp32:
 # Set encryption key
 api:
   encryption:
-    key: ""
+    key: !secret sim_api_key
 # Set an ota password
 ota:
-  password: ""
+  password: !secret sim_ota_password
 
 wifi:
-  ssid: !secret wifi_ssid
-  password: !secret wifi_password
+  ssid: !secret sim_wifi_ssid
+  password: !secret sim_wifi_password
   power_save_mode: none
 # Default is DHCP, uncomment block below for manual config
   manual_ip:
@@ -28,6 +28,6 @@ wifi:
 # Set hotspot password
   ap:
     ssid: "Esp-LGSIM Fallback Hotspot"
-    password: ""
+    password: !secret sim_hotspot_password
 
 captive_portal:
