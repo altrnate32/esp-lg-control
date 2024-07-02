@@ -47,7 +47,7 @@ logger:
     esp32.preferences: WARN
     sensor: WARN
     text_sensor: WARN
-    dallas.sensor: WARN #disable if dallas is not used
+    dallas.temp.sensor: WARN #disable if dallas is not used
     number: WARN
 
 number:
