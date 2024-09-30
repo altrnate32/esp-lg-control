@@ -345,6 +345,13 @@ sensor:
     unit_of_measurement: "°C/h" 
     update_interval: never  
     icon: mdi:sigma
+  - platform: template
+    name: "Error degree minutes"
+    id: wp_error_integral
+    accuracy_decimals: 1
+    unit_of_measurement: "degree minutes" 
+    update_interval: never  
+    icon: mdi:sigma
 # Sensors for ESP version and WIFI information
 text_sensor:
   - platform: version

@@ -41,6 +41,9 @@ lambda: !lambda |-
         //SPECIAL: reads raw values to determine if setup is complete
         //entry actions
         if(!fsm.entry_done){
+          //publish initial derivative and error_integral value
+          id(derivative_value).publish_state(0);
+          id(wp_error_integral).publish_state(0);
           fsm.entry_done = true;
         }
         //enforce config
@@ -191,10 +194,10 @@ lambda: !lambda |-
         if(fsm.check_change_events()) break;
 
         //check how far we are in the run
-        if( (fsm.get_run_time() - fsm.get_run_start_time()) > (15*60) || ((fsm.get_run_time() - fsm.get_run_start_time()) > (6*60) && fsm.compressor_modulation())){
+        if(fsm.get_run_start_time() > (20*60) && fsm.compressor_modulation()){
           //monitor situation
-          //we are stable if derivative => -3 and <= 3 (1 degree in 20 minutes) or if compressor starts modulation (after 6 minutes)
-           if(fsm.compressor_modulation() || ((fsm.derivative_D_10 * 60) >= -3 && (fsm.derivative_D_10 * 60) <= 3)){
+          //we are stable if derivative => -3 and <= 3 (1 degree in 20 minutes)
+           if( (fsm.derivative_D_10 * 60) >= -3 && (fsm.derivative_D_10 * 60) <= 3){
             //hand over to run algoritm, run will decide on overshoot/undershoot depending on where we stabilized
             ESP_LOGD(fsm.state_name(),"Stabilized, RUN is next");
             id(controller_info).publish_state("Normal system operation");
@@ -323,7 +326,7 @@ lambda: !lambda |-
         if(fsm.input[TEMP_NEW_TARGET]->value > fsm.input[STOOKLIJN_TARGET]->value){
           //target overshoot logic to return to target
           //check if target can be lowered without killing the run
-          if(fsm.pendel_delta <= fsm.hysteresis-1){
+          if(fsm.pendel_delta < (fsm.hysteresis-1)){
             //lower target, but not below fsm.input[STOOKLIJN_TARGET]->value
             fsm.set_safe_new_target(max(fsm.input[STOOKLIJN_TARGET]->value,fsm.input[TEMP_NEW_TARGET]->value - 1));
             ESP_LOGD(fsm.state_name(), "Operating above stooklijn_target pendel_target (%f) could be lowered",fsm.input[TEMP_NEW_TARGET]->value);

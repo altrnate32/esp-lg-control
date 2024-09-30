@@ -26,6 +26,7 @@
         uint_fast32_t run_start_time = 0; //run_time_value of start of heat run
         int current_boost_offset = 0 ;//keep track of offset during boost mode. Will be 0 if boost is not active
         std::vector<float> derivative; //vector of floats to integrate derivative (used in control logic)
+        float error_integral = 0; //to provide 'degree minutes' sensor data
         bool backup_heat_temp_limit_trigger = false; //if backup heat triggered due to low temperature (always on)?
         bool update_stooklijn_bool = true;
         //backup_heat_mode select
@@ -77,6 +78,7 @@
         float calculate_stooklijn();
         bool thermostat_state();
         void calculate_derivative(float tracking_value);
+        void calculate_integral(float tracking_value, float target);
         void heat(bool mode);
         void external_pump(bool mode);
         void backup_heat(bool mode,bool temp_limit_trigger = false);
@@ -220,7 +222,7 @@
     input[OAT]->receive_value(round(id(filtered_oat).state)); //outside air temperature
     if(input[OAT]->has_flag() || update_stooklijn_bool) input[STOOKLIJN_TARGET]->receive_value(calculate_stooklijn()); //stooklijn target
     //Set to value that anti-pendel script will track (outlet/inlet) (recommend inlet)
-    input[TRACKING_VALUE]->receive_value(floor(id(water_temp_aanvoer).state));
+    input[TRACKING_VALUE]->receive_value(id(water_temp_aanvoer).state);
     input[BOOST]->receive_state(id(boost_switch).state);
     input[BACKUP_HEAT]->receive_state(id(relay_backup_heat).state); //is backup heat on/off
     input[EXTERNAL_PUMP]->receive_state(id(relay_pump).state); //is external pump on/off
@@ -241,11 +243,19 @@
     toggle_silent_mode();
     if(input[WP_PUMP]->state && state() != SWW && state() != DEFROST && state() != BACKUP_ONLY){
       //calculate derivative and publish new value
-      calculate_derivative(input[TRACKING_VALUE]->value);
+      calculate_derivative(input[TRACKING_VALUE]->value);      
     } else if(!input[WP_PUMP]->state && derivative.size() > 0){
       //if pump not running and derivative has values clear it
       derivative.clear();
       id(derivative_value).publish_state(0);
+    }
+    if(input[COMPRESSOR]->state){
+      //calculate error integral and publish new value
+      calculate_integral(input[TRACKING_VALUE]->value,input[STOOKLIJN_TARGET]->value);
+    } else if (error_integral != 0){
+      //clear error integral
+      error_integral = 0;
+      id(wp_error_integral).publish_state(0);
     }
   }
   //set input.value.prev_value = input_value.value to remove the implicit 'value changed' flag
@@ -338,7 +348,7 @@
     return input[THERMOSTAT]->state;
   }
   //***************************************************************
-  //*******************Derivative**********************************
+  //*******************Derivative/Integral*************************
   //***************************************************************
   void state_machine_class::calculate_derivative(float tracking_value){
     float d_number = tracking_value;
@@ -363,6 +373,15 @@
     pred_5_delta_5 = (tracking_value + (derivative_D_5*5))- input[STOOKLIJN_TARGET]->value;
     //publish new value
     id(derivative_value).publish_state(derivative_D_10*60);
+  }
+  void state_machine_class::calculate_integral(float tracking_value, float target){
+    float prev_integral = error_integral;
+    //two ticks per minute, so half the error
+    error_integral += (tracking_value - target)/2;
+    //publish new value
+    if(prev_integral != error_integral){
+      id(wp_error_integral).publish_state(error_integral);
+    }
   }
   //***************************************************************
   //*******************Heat****************************************
