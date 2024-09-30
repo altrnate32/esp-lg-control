@@ -194,7 +194,7 @@ lambda: !lambda |-
         if(fsm.check_change_events()) break;
 
         //check how far we are in the run
-        if(fsm.get_run_start_time() > (20*60) && fsm.compressor_modulation()){
+        if((fsm.get_run_time() - fsm.get_run_start_time()) > (20*60) && fsm.compressor_modulation()){
           //monitor situation
           //we are stable if derivative => -3 and <= 3 (1 degree in 20 minutes)
            if( (fsm.derivative_D_10 * 60) >= -3 && (fsm.derivative_D_10 * 60) <= 3){
