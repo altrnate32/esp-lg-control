@@ -47,7 +47,7 @@
         //default values, change these if you want
         int boost_offset = 2; //number of degrees to raise stooklijn in boost mode
         int hysteresis = 4; //Set controller control mode to 'outlet' and set hysteresis to the setting you have on the controller (recommend 4)
-        int max_overshoot = 3; //maximum allowable overshoot in 'OVERSHOOT' state
+        int max_overshoot = 5; //maximum allowable overshoot in 'OVERSHOOT' state
         int alive_timer = 120; //interval in seconds for an 'alive' message in the logs
         float delta = 0; //Current Error value negative below target, positive above target
         float pendel_delta = 0; //Error value in regard to pendel target
@@ -90,6 +90,7 @@
         void set_silent_after_defrost();
         int get_target_offset();
         void set_safe_new_target(float new_target);
+        void set_unsafe_new_target(float new_target);
         void start_events();
         void add_event(input_types ev);
         bool check_change_events();
@@ -229,7 +230,7 @@
     input[RELAY_HEAT]->receive_state(id(relay_heat).state); //is realy_heat (heatpump external thermostat contact) on/off
     input[WP_PUMP]->receive_state(id(pump_running).state); //is internal pump running
     input[SILENT_MODE]->receive_state(id(silent_mode_state).state); //is silent mode on
-    if(input[TEMP_NEW_TARGET]->value == 0.0) input[TEMP_NEW_TARGET]->value = input[STOOKLIJN_TARGET]->value; // set temp new target
+    if(input[TEMP_NEW_TARGET]->value == 0.0) set_safe_new_target(input[STOOKLIJN_TARGET]->value); // set temp new target in case of instant start
     delta = input[TRACKING_VALUE]->value-input[STOOKLIJN_TARGET]->value; 
     pendel_delta = input[TRACKING_VALUE]->value-input[TEMP_NEW_TARGET]->value;
   }
@@ -243,7 +244,7 @@
     toggle_silent_mode();
     if(input[WP_PUMP]->state && state() != SWW && state() != DEFROST && state() != BACKUP_ONLY){
       //calculate derivative and publish new value
-      calculate_derivative(input[TRACKING_VALUE]->value);      
+      calculate_derivative(input[TRACKING_VALUE]->value);
     } else if(!input[WP_PUMP]->state && derivative.size() > 0){
       //if pump not running and derivative has values clear it
       derivative.clear();
@@ -289,7 +290,7 @@
     //wait for a valid oat reading
     float oat = 20;
     if(input[OAT]->value > 60 || input[OAT]->value < -50 || isnan(input[OAT]->value)){
-      oat = prev_oat;
+      input[OAT]->value = prev_oat;
       //use prev_oat (or 20) and do not set update_stooklijn to false, to trigger a new run on next cycle
       ESP_LOGD("calculate_stooklijn", "Invalid OAT (%f) waiting for next run", input[OAT]->value);
     }  else {
@@ -590,12 +591,23 @@
     return -1;
   }
   void state_machine_class::set_safe_new_target(float new_target){
-    //set a target that is not below tracking_value - 3
+    float prev_target = new_target;
+    //set a target that keeps a margin of at least 0.3 to the hysteresis
     if(new_target != input[TEMP_NEW_TARGET]->value){
-      //don't allow a value below tracking_value-hysteresis+1
-      if(new_target < ((input[TRACKING_VALUE]->value-hysteresis)+1)) new_target = ((input[TRACKING_VALUE]->value-hysteresis)+1);
+      //don't allow a value below tracking_value-hysteresis+0.3
+      if(new_target < (input[TRACKING_VALUE]->value-hysteresis+0.3)) new_target = ceil(input[TRACKING_VALUE]->value-hysteresis+0.3);
       //also not below minimum watertemp -2
       if(new_target < (id(stooklijn_min_wtemp).state - 2)) new_target = (id(stooklijn_min_wtemp).state - 2);
+      //and not above max overshoot
+      if(new_target > input[STOOKLIJN_TARGET]->value + max_overshoot) new_target = input[STOOKLIJN_TARGET]->value + max_overshoot;
+      input[TEMP_NEW_TARGET]->receive_value(new_target);
+    }
+    if(prev_target != new_target){
+      ESP_LOGD(state_name(), "set_safe_target adjusted target from: %f to %f",prev_target,new_target);
+    }
+  }
+  void state_machine_class::set_unsafe_new_target(float new_target){
+    if(new_target != input[TEMP_NEW_TARGET]->value){
       input[TEMP_NEW_TARGET]->receive_value(new_target);
     }
   }
@@ -697,7 +709,7 @@
     return state_change;
   }
   bool state_machine_class::compressor_modulation(){
-    if(input[SILENT_MODE]->state && id(compressor_rpm).state <= 50) return true;
+    if(input[SILENT_MODE]->state && id(compressor_rpm).state <= 45) return true;
     else if(!input[SILENT_MODE]->state && id(compressor_rpm).state <= 70) return true;
     else return false;
   }
@@ -707,9 +719,10 @@
   //update target temp through modbus
   void state_machine_class::set_target_temp(float target){
     auto water_temp_call = id(water_temp_target_output).make_call();
-    water_temp_call.set_value(round(target));
+    target = round(target);
+    water_temp_call.set_value(target);
     water_temp_call.perform();
-    ESP_LOGD("set_target_temp", "Modbus target set to: %f", round(target));
+    ESP_LOGD("set_target_temp", "Modbus target set to: %f", target);
     id(doel_temp).publish_state(target*10);
   }
   //proces automatic_boost and backup_heat_mode selects
