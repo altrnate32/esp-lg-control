@@ -81,6 +81,14 @@ binary_sensor:
 sensor:
   - platform: modbus_controller
     modbus_controller_id: lg
+    name: "Error code"
+    id: error_code
+    register_type: read
+    address: 0
+    value_type: U_WORD
+    icon: mdi:alert-octagon
+  - platform: modbus_controller
+    modbus_controller_id: lg
     name: "Bedrijfsmodus"
     id: bedrijfsmodus
     register_type: read
