@@ -43,7 +43,8 @@ lambda: !lambda |-
         if(!fsm.entry_done){
           //publish initial derivative and error_integral value
           id(derivative_value).publish_state(0);
-          id(wp_error_integral).publish_state(0);
+          id(wp_stooklijn_error_integral).publish_state(0);
+          id(wp_target_error_integral).publish_state(0);
           fsm.entry_done = true;
         }
         //enforce config
@@ -116,9 +117,18 @@ lambda: !lambda |-
         if(!fsm.entry_done){
           fsm.entry_done = true;
           fsm.external_pump(true); //external pump on
-          fsm.heat(true); //heat on (to start heatpump)
           fsm.backup_heat(false);
           id(controller_info).publish_state("External pump on. 3 min pre-run.");
+          //set initial target, to prevent compressor starting on too hot system
+          int new_target = fsm.input[STOOKLIJN_TARGET]->value - 1;
+          if(fsm.input[COMPRESSOR]->state){
+            //we don't want to kill it in case of instant start
+            fsm.set_safe_new_target(new_target);
+          } else {
+            //set this unsafe, because we don't want to startup when system temp is still to high
+            fsm.set_unsafe_new_target(new_target);
+          }
+          ESP_LOGD(fsm.state_name(), "Run start initial target set; stooklijn_target: %f pendel_target: %f tracking_value: %f ",fsm.input[STOOKLIJN_TARGET]->value,fsm.input[TEMP_NEW_TARGET]->value,fsm.input[TRACKING_VALUE]->value);
         }
         //enforce config
         fsm.backup_heat(false);
@@ -129,18 +139,8 @@ lambda: !lambda |-
         
         //three minutes delay to allow pump to run and values to stabilise 
         if(fsm.seconds_since_state_start() < (3*60)) break;
-        //set target, but not below stooklijn minimum water temp - 2
-        int new_target = fsm.input[STOOKLIJN_TARGET]->value + fsm.get_target_offset();
-        if(fsm.input[COMPRESSOR]->state){
-          //we don't want to kill it in case of instant start
-          fsm.set_safe_new_target(new_target);
-        } else {
-          //set this unsafe, because we don't want to startup when system temp is still to high
-          fsm.set_unsafe_new_target(new_target);
-        }
-        ESP_LOGD(fsm.state_name(), "Run start initial target set; stooklijn_target: %f pendel_target: %f tracking_value: %f ",fsm.input[STOOKLIJN_TARGET]->value,fsm.input[TEMP_NEW_TARGET]->value,fsm.input[TRACKING_VALUE]->value);
         fsm.set_run_start_time();
-        id(controller_info).publish_state("Waiting for compressor start");
+        id(controller_info).publish_state("Starting heatpump, waiting for compressor");
         fsm.state_transition(STARTING);
         break;
       }
@@ -153,6 +153,7 @@ lambda: !lambda |-
         //SPECIAL: none
         if(!fsm.entry_done){
           fsm.entry_done = true;
+          fsm.heat(true); //heat on (to start heatpump)
         }
         //enforce allowed config
         fsm.backup_heat(false);
@@ -168,19 +169,13 @@ lambda: !lambda |-
                 
         if(fsm.input[COMPRESSOR]->state){
           //we have ignition
+          //update target to realistic target
+          int new_target = fsm.get_realistic_start_target();
+          if(new_target != fsm.input[TEMP_NEW_TARGET]->value){
+            fsm.set_safe_new_target(new_target); //safe, we don't want to kill it again
+          }
           id(controller_info).publish_state("Compressor is on; Waiting for modulation");
           fsm.state_transition(STABILIZE);
-        }
-        //update target if stooklijn or stooklijn offset changes
-        int new_target = fsm.input[STOOKLIJN_TARGET]->value + fsm.get_target_offset();
-        if(new_target != fsm.input[TEMP_NEW_TARGET]->value){
-          if(fsm.input[COMPRESSOR]->state){
-            //we don't want to kill it in case of instant start
-            fsm.set_safe_new_target(new_target);
-          } else {
-            //set this unsafe, because we don't want to startup when system temp is still to high
-            fsm.set_unsafe_new_target(new_target);
-          }
         }
         break;
       }
@@ -219,7 +214,7 @@ lambda: !lambda |-
           }
         }
         //else still early run
-        //update target if will be killed
+        //update target only if will be killed
         if(fsm.pendel_delta > (fsm.hysteresis-0.3)){
           int new_target = fsm.input[TEMP_NEW_TARGET]->value + 1;
           fsm.set_safe_new_target(new_target);
@@ -334,7 +329,7 @@ lambda: !lambda |-
         if(fsm.input[TEMP_NEW_TARGET]->value > fsm.input[STOOKLIJN_TARGET]->value){
           //target overshoot logic to return to target
           //check if target can be lowered without killing the run
-          if(fsm.pendel_delta < (fsm.hysteresis-1.4)){
+          if(fsm.pendel_delta < (fsm.hysteresis-2)){
             //lower target, but not below fsm.input[STOOKLIJN_TARGET]->value
             int new_target = fsm.input[TEMP_NEW_TARGET]->value - 1;
             if(new_target < fsm.input[STOOKLIJN_TARGET]->value) new_target = fsm.input[STOOKLIJN_TARGET]->value;
@@ -450,6 +445,12 @@ lambda: !lambda |-
         //SPECIAL: none
         if(!fsm.entry_done){
           id(controller_info).publish_state("Compressor stopped -> Wait");
+          int new_target = fsm.input[STOOKLIJN_TARGET]->value - 1;
+          if(new_target != fsm.input[TEMP_NEW_TARGET]->value){
+            //set this unsafe, because we don't want to startup when system temp is still to high
+            fsm.set_unsafe_new_target(new_target);
+            ESP_LOGD(fsm.state_name(),"Wait started. target changed: Setting new target: %f",fsm.input[TEMP_NEW_TARGET]->value);
+          }
           fsm.entry_done = true;
         }
         //enforce allowed config
@@ -462,17 +463,13 @@ lambda: !lambda |-
         fsm.add_event(BACKUP_ONLY_SWITCH);
         if(fsm.check_change_events()) break;
         
-        //set new target (also after stooklijn value change)
-        int new_target = fsm.input[STOOKLIJN_TARGET]->value + fsm.get_target_offset();
-        if(new_target != fsm.input[TEMP_NEW_TARGET]->value){
-          if(fsm.input[COMPRESSOR]->state){
-            //we don't want to kill it in case of instant start
+        //compressor started, so system temp is within range set realistic startup target
+        if(fsm.input[COMPRESSOR]->state){
+          int new_target = fsm.get_realistic_start_target();
+          if(new_target != fsm.input[TEMP_NEW_TARGET]->value){
             fsm.set_safe_new_target(new_target);
-          } else {
-            //set this unsafe, because we don't want to startup when system temp is still to high
-            fsm.set_unsafe_new_target(new_target);
+            ESP_LOGD(fsm.state_name(),"Compressor on. target changed: Setting new target: %f",fsm.input[TEMP_NEW_TARGET]->value);
           }
-          ESP_LOGD(fsm.state_name(),"Target changed: Setting new target: %f",fsm.input[TEMP_NEW_TARGET]->value);
         }
         //wait at least 6 minutes before switching to run, even if compressor is running
         if(fsm.seconds_since_state_start() < (6*60)) break;

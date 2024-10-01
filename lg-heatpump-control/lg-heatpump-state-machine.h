@@ -26,7 +26,8 @@
         uint_fast32_t run_start_time = 0; //run_time_value of start of heat run
         int current_boost_offset = 0 ;//keep track of offset during boost mode. Will be 0 if boost is not active
         std::vector<float> derivative; //vector of floats to integrate derivative (used in control logic)
-        float error_integral = 0; //to provide 'degree minutes' sensor data
+        float stooklijn_error_integral = 0; //to provide 'degree minutes' sensor data
+        float target_error_integral = 0; //to provide 'degree minutes' sensor data
         bool backup_heat_temp_limit_trigger = false; //if backup heat triggered due to low temperature (always on)?
         bool update_stooklijn_bool = true;
         //backup_heat_mode select
@@ -78,7 +79,7 @@
         float calculate_stooklijn();
         bool thermostat_state();
         void calculate_derivative(float tracking_value);
-        void calculate_integral(float tracking_value, float target);
+        void calculate_integral(float tracking_value, float stooklijn_target, float wp_target);
         void heat(bool mode);
         void external_pump(bool mode);
         void backup_heat(bool mode,bool temp_limit_trigger = false);
@@ -89,6 +90,7 @@
         void toggle_silent_mode();
         void set_silent_after_defrost();
         int get_target_offset();
+        int get_realistic_start_target();
         void set_safe_new_target(float new_target);
         void set_unsafe_new_target(float new_target);
         void start_events();
@@ -252,11 +254,12 @@
     }
     if(input[COMPRESSOR]->state){
       //calculate error integral and publish new value
-      calculate_integral(input[TRACKING_VALUE]->value,input[STOOKLIJN_TARGET]->value);
-    } else if (error_integral != 0){
+      calculate_integral(input[TRACKING_VALUE]->value,input[STOOKLIJN_TARGET]->value,input[TEMP_NEW_TARGET]->value);
+    } else if (stooklijn_error_integral != 0||target_error_integral != 0){
       //clear error integral
-      error_integral = 0;
-      id(wp_error_integral).publish_state(0);
+      stooklijn_error_integral = 0;
+      target_error_integral = 0;
+      id(wp_stooklijn_error_integral).publish_state(0);
     }
   }
   //set input.value.prev_value = input_value.value to remove the implicit 'value changed' flag
@@ -375,13 +378,18 @@
     //publish new value
     id(derivative_value).publish_state(derivative_D_10*60);
   }
-  void state_machine_class::calculate_integral(float tracking_value, float target){
-    float prev_integral = error_integral;
+  void state_machine_class::calculate_integral(float tracking_value, float stooklijn_target, float wp_target){
+    float prev_stooklijn_integral = stooklijn_error_integral;
+    float prev_target_integral = target_error_integral;
     //two ticks per minute, so half the error
-    error_integral += (tracking_value - target)/2;
+    stooklijn_error_integral += (tracking_value - stooklijn_target)/2;
+    target_error_integral += (tracking_value - wp_target)/2;
     //publish new value
-    if(prev_integral != error_integral){
-      id(wp_error_integral).publish_state(error_integral);
+    if(prev_stooklijn_integral != stooklijn_error_integral){
+      id(wp_stooklijn_error_integral).publish_state(stooklijn_error_integral);
+    }
+    if(prev_target_integral != target_error_integral){
+      id(wp_target_error_integral).publish_state(target_error_integral);
     }
   }
   //***************************************************************
@@ -582,13 +590,29 @@
     silent_after_defrost_start_time = get_run_time();
     silent_on_after_defrost = true;
     silent_mode(true);
-    ESP_LOGE(state_name(), "Silent on After Defrost");
+    ESP_LOGD(state_name(), "Silent on After Defrost");
     id(controller_info).publish_state("Switching Silent on after defrost");
   }
   int state_machine_class::get_target_offset(){
     if(input[OAT]->value >= 10) return -3;
     if(input[OAT]->value >= id(oat_silent_always_on).state) return -2;
     return -1;
+  }
+  //Calculate a realistic start target, based on expexted delta T
+  //Example: if tracking_value = 25 and expected delta T is 8 degrees, a target of 26 is not realistic
+  //corrected for the fact that target setting using this function will always happen (shortly) after compressor start
+  int state_machine_class::get_realistic_start_target(){
+    
+    //this is wat we want
+    int new_target = input[STOOKLIJN_TARGET]->value + get_target_offset();
+    int expected_d_t = 7;
+    if(input[OAT]->value < 9 && input[OAT]->value >= id(oat_silent_always_on).state) expected_d_t = 6;
+    else if(input[OAT]->value < id(oat_silent_always_on).state && input[OAT]->value >= id(oat_silent_always_off).state) expected_d_t = 5;
+    else if(input[OAT]->value < id(oat_silent_always_off).state) expected_d_t = 5;
+    int lowest_realistic = round(input[TRACKING_VALUE]->value) + expected_d_t;
+    ESP_LOGD(state_name(), "Start_target: Wanted %d, expected delta t: %d, tracking_value: %f, lowest_realistic: %d",new_target,expected_d_t,round(input[TRACKING_VALUE]->value),lowest_realistic);
+    if(new_target < lowest_realistic) new_target = lowest_realistic;
+    return new_target;
   }
   void state_machine_class::set_safe_new_target(float new_target){
     float prev_target = new_target;

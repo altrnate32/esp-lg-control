@@ -346,8 +346,15 @@ sensor:
     update_interval: never  
     icon: mdi:sigma
   - platform: template
-    name: "Error degree minutes"
-    id: wp_error_integral
+    name: "Stooklijn Error degree minutes"
+    id: wp_stooklijn_error_integral
+    accuracy_decimals: 1
+    unit_of_measurement: "degree minutes" 
+    update_interval: never  
+    icon: mdi:sigma
+  - platform: template
+    name: "Target Error degree minutes"
+    id: wp_target_error_integral
     accuracy_decimals: 1
     unit_of_measurement: "degree minutes" 
     update_interval: never  
