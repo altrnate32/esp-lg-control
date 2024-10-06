@@ -180,7 +180,7 @@ lambda: !lambda |-
         }
         //while compressor is not on, keep checking of target updates (in case offset changes)
         int new_target = fsm.input[STOOKLIJN_TARGET]->value - 1;
-        if(new_target != input[TEMP_NEW_TARGET]->value){
+        if(new_target != fsm.input[TEMP_NEW_TARGET]->value){
             //set this unsafe, because we don't want to startup when system temp is still to high
             fsm.set_unsafe_new_target(new_target);
         }
