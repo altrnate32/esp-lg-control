@@ -22,19 +22,19 @@ modbus_controller:
 
 switch:
   - platform: modbus_controller
-    name: "Silent Mode"
-    modbus_controller_id: lg
-    id: silent_mode_switch
-    register_type: coil
-    address: 2
-    icon: mdi:volume-off
-  - platform: modbus_controller
     name: "SWW On/Off"
     modbus_controller_id: lg
     id: sww_on_off
     register_type: coil
     address: 1
     icon: mdi:shower-head
+  - platform: modbus_controller
+    name: "Silent Mode"
+    modbus_controller_id: lg
+    id: silent_mode_switch
+    register_type: coil
+    address: 2
+    icon: mdi:volume-off
   
 binary_sensor:
   - platform: modbus_controller
@@ -42,15 +42,21 @@ binary_sensor:
     name: "Pump Running"
     id: pump_running
     register_type: discrete_input
-    skip_updates: 1
     address: 1
+    icon: mdi:pump
+#not needed for the controller, but added to optimise modbus communication
+  - platform: modbus_controller
+    modbus_controller_id: lg
+    name: "External Pump Running"
+    id: external_pump_running
+    register_type: discrete_input
+    address: 2
     icon: mdi:pump
   - platform: modbus_controller
     modbus_controller_id: lg
     name: "Compressor Running"
     id: compressor_running
     register_type: discrete_input
-    skip_updates: 1
     address: 3
     icon: mdi:car-turbocharger
   - platform: modbus_controller
@@ -58,7 +64,6 @@ binary_sensor:
     name: "Defrosting"
     id: defrosting
     register_type: discrete_input
-    skip_updates: 1
     address: 4
     icon: mdi:snowflake-melt
   - platform: modbus_controller
@@ -66,15 +71,21 @@ binary_sensor:
     name: "SWW Heating"
     id: sww_heating
     register_type: discrete_input
-    skip_updates: 1
     address: 5
     icon: mdi:shower-head
+#not needed for the controller, but added to optimise modbus communication
+  - platform: modbus_controller
+    modbus_controller_id: lg
+    name: "Boiler disinfection"
+    id: boiler_disinfection
+    register_type: discrete_input
+    address: 6
+    icon: mdi:pump
   - platform: modbus_controller
     modbus_controller_id: lg
     name: "Silent Mode"
     id: silent_mode_state
     register_type: discrete_input
-    skip_updates: 1
     address: 7
     icon: mdi:volume-off
 
@@ -93,7 +104,6 @@ sensor:
     id: bedrijfsmodus
     register_type: read
     address: 1
-    #skip_updates: 12
     value_type: U_WORD
     icon: mdi:information-outline
   - platform: modbus_controller
@@ -116,6 +126,7 @@ sensor:
     id: water_temp_aanvoer
     register_type: read
     address: 3
+    register_count: 2
     device_class: "temperature"
     unit_of_measurement: "°C"
     state_class: "measurement"
@@ -130,6 +141,7 @@ sensor:
     id: sww_temp
     register_type: read
     address: 5
+    register_count: 2
     device_class: "temperature"
     unit_of_measurement: "°C"
     state_class: "measurement"
@@ -169,6 +181,7 @@ sensor:
     id: current_flow_rate
     register_type: read
     address: 8
+    register_count: 4
     device_class: "water"
     state_class: "measurement"
     unit_of_measurement: "L/m"
@@ -186,6 +199,7 @@ sensor:
     id: buiten_temp
     register_type: read
     address: 12
+#    register_count: 4
     device_class: "temperature"
     unit_of_measurement: "°C"
     state_class: "measurement"
@@ -276,6 +290,7 @@ sensor:
     id: condensor_temp
     register_type: read
     address: 20
+#    register_count: 2
     device_class: "temperature"
     unit_of_measurement: "°C"
     state_class: "measurement"
@@ -325,12 +340,12 @@ sensor:
     id: doel_temp
     register_type: holding
     address: 2
+    register_count: 6
     device_class: "temperature"
     unit_of_measurement: "°C"
     state_class: "measurement"
     value_type: U_WORD
     accuracy_decimals: 1
-    skip_updates: 3
     filters:
       - multiply: 0.1
     icon: mdi:home-thermometer-outline
@@ -345,7 +360,6 @@ sensor:
     state_class: "measurement"
     value_type: U_WORD
     accuracy_decimals: 1
-    skip_updates: 3
     filters:
       - multiply: 0.1
     icon: mdi:thermometer-water
