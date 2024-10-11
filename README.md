@@ -2,8 +2,7 @@
 [Github Link](https://github.com/johanneswilkens/Heat-Pump-Controller-PCB)
 
 ## State of main branch: 
-Current state of main: new feature (switch of HP when backup heat runs) not fully tested  
-Seems to run fine, but not tested all cases yet, so please report.
+Quite stable
 Remains experimental (so use at your own risk) but functions good in my setup
 
 ## Enable/Disable external thermostat/relays:
