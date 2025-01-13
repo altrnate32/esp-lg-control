@@ -18,6 +18,12 @@ packages:
   #without_external_relays: !include lg-heatpump-control/sensors/lg-without-external-relays.yaml #Replace external thermostat by an on/off switch
   #*****
 
+  #Again enable correct version to include HA Feelslike sensor
+  #*****
+  with_ha_feelslike: !include lg-heatpump-control/sensors/lg-with-ha-feelslike-sensor.yaml
+  #without_ha_feelslike: !include lg-heatpump-control/sensors/lg-without-ha-feelslike-sensor.yaml
+  #*****
+
 esphome:
   name: "${device_name}"
   includes:
@@ -326,6 +332,14 @@ sensor:
     state_class: "measurement"
     update_interval: never
     icon: mdi:home-thermometer-outline
+  - platform: template
+    name: "Stooklijn Calculation Temperature"
+    id: stooklijn_calc
+    device_class: "temperature"
+    unit_of_measurement: "°C"
+    state_class: "measurement"
+    update_interval: never
+    icon: mdi:thermometer
   - platform: wifi_signal
     name: "${device_name} WiFi Signal"
     update_interval: 120s

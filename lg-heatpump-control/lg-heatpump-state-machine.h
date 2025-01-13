@@ -28,6 +28,7 @@
         std::vector<float> derivative; //vector of floats to integrate derivative (used in control logic)
         float stooklijn_error_integral = 0; //to provide 'degree minutes' sensor data
         float target_error_integral = 0; //to provide 'degree minutes' sensor data
+        const float feelslike_factor = 0.4; //the factor used when using feelslike factor for stooklijn calculations
         bool backup_heat_temp_limit_trigger = false; //if backup heat triggered due to low temperature (always on)?
         bool update_stooklijn_bool = true;
         //backup_heat_mode select
@@ -46,8 +47,8 @@
         input_struct* input[17]; //list of all inputs
         bool entry_done = false;
         //default values, change these if you want
-        int boost_offset = 2; //number of degrees to raise stooklijn in boost mode
-        int hysteresis = 4; //Set controller control mode to 'outlet' and set hysteresis to the setting you have on the controller (recommend 4)
+        const int boost_offset = 2; //number of degrees to raise stooklijn in boost mode
+        const int hysteresis = 4; //Set controller control mode to 'outlet' and set hysteresis to the setting you have on the controller (recommend 4)
         int max_overshoot = 5; //maximum allowable overshoot in 'OVERSHOOT' state
         int alive_timer = 120; //interval in seconds for an 'alive' message in the logs
         float delta = 0; //Current Error value negative below target, positive above target
@@ -300,6 +301,17 @@
       prev_oat = input[OAT]->value;
       update_stooklijn_bool = false;
     }
+    float oat_value = round(input[OAT]->value);
+    if(id(use_feelslike).state){
+      //use feelslike temp to offset stooklijn
+      if(!isnan(id(filtered_feelslike).state) && id(filtered_feelslike).state > -20 && id(filtered_feelslike).state < 25){
+        oat_value = floor((oat_value * (1-this->feelslike_factor)) + (id(filtered_feelslike).state * this->feelslike_factor));
+      } else {
+        //no valid feelslike received, update on next run
+        ESP_LOGD("calculate_stooklijn", "Invalid feelslike (%f) updating on next run", id(filtered_feelslike).state);
+        update_stooklijn_bool = true;
+      }
+    }
     float new_stooklijn_target;
     //OAT expects start temp to be OAT 20 with Watertemp 20. Steepness is defined bij Z, calculated by the max wTemp at minOat
     //Formula is wTemp = ((Z x (stooklijn_max_oat - OAT)) + stooklijn_min_wtemp) + C 
@@ -309,7 +321,6 @@
     //I need it in my installation as the stooklijn is spot on at relative high temperatures, but too low at lower temps (or vice versa)
     const float Z =  0 - (float)( (id(stooklijn_max_wtemp).state-id(stooklijn_min_wtemp).state)/(id(stooklijn_min_oat).state - id(stooklijn_max_oat).state));
     //If oat above or below maximum/minimum oat, clamp to stooklijn_max/min value
-    float oat_value = round(input[OAT]->value);
     if(oat_value > id(stooklijn_max_oat).state) oat_value = id(stooklijn_max_oat).state;
     else if(oat_value < id(stooklijn_min_oat).state) oat_value = id(stooklijn_min_oat).state;
     float C = (id(stooklijn_curve).state*0.01)*pow(oat_value,2);
@@ -320,9 +331,11 @@
     new_stooklijn_target = new_stooklijn_target + current_boost_offset;
     //Clamp target to minimum temp/max water+3
     clamp(new_stooklijn_target,id(stooklijn_min_wtemp).state,id(stooklijn_max_wtemp).state+3);
-    ESP_LOGD("calculate_stooklijn", "Stooklijn calculated with oat: %f, Z: %f, C: %f offset: %f, result: %f",input[OAT]->value, Z, C, id(wp_stooklijn_offset).state, new_stooklijn_target);
+    ESP_LOGD("calculate_stooklijn", "Stooklijn calculated with oat: %f, calc_base %f, Z: %f, C: %f offset: %f, result: %f",input[OAT]->value, oat_value, Z, C, id(wp_stooklijn_offset).state, new_stooklijn_target);
     //Publish new stooklijn value to watertemp value sensor
     id(watertemp_target).publish_state(new_stooklijn_target);
+    //Publish calculation base
+    id(stooklijn_calc).publish_state(oat_value);
     return new_stooklijn_target;
   }
   //***************************************************************
@@ -490,7 +503,7 @@
           external_pump(true);
           ESP_LOGD(state_name(),"Invalid configuration relay_backup_heat on before relay_pump.");
           id(controller_info).publish_state("Invalid config: backup_heat on before pump.");
-        }        
+        }
       }
     } else {
       if(id(relay_backup_heat).state){
@@ -748,6 +761,8 @@
     water_temp_call.perform();
     ESP_LOGD("set_target_temp", "Modbus target set to: %f", target);
     id(doel_temp).publish_state(target*10);
+    //reset target integral
+    target_error_integral = 0;
   }
   //proces automatic_boost and backup_heat_mode selects
   void state_machine_class::proces_selects(){

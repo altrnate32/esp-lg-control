@@ -1,0 +1,37 @@
+switch:
+  - platform: template
+    name: "Use Feelslike temperature"
+    id: use_feelslike
+    restore_mode: RESTORE_DEFAULT_ON
+    optimistic: true
+    icon: mdi:thermometer-water
+
+sensor:
+  - platform: homeassistant
+    name: "HA Feelslike Temperature"
+    entity_id: sensor.openweathermap_feels_like_temperature
+    id: ha_feelslike_temperature
+  - platform: template
+    name: "Filtered Feelslike"
+    id: filtered_feelslike
+    device_class: "temperature"
+    unit_of_measurement: "°C"
+    state_class: "measurement"
+    accuracy_decimals: 1
+    lambda: |-
+      static float prev_feelslike = -100.0;
+      float new_feelslike = -100.0;
+      if(!isnan(id(ha_feelslike_temperature).state)){
+        new_feelslike = floor(id(ha_feelslike_temperature).state);
+        if(new_feelslike - prev_feelslike > 0.5) {
+          fsm.update_stooklijn();
+          prev_feelslike = new_feelslike;
+        }
+      }
+      return new_feelslike;
+    update_interval: 60s
+    filters:
+      - or:
+        - throttle: 60min
+        - delta: 2.0
+    icon: mdi:thermometer-water

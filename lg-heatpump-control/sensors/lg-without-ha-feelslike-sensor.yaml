@@ -1,0 +1,18 @@
+switch:
+  - platform: template
+    name: "Use Feelslike temperature"
+    id: use_feelslike
+    restore_mode: DEFAULT_OFF
+    optimistic: false
+    internal: true
+    lambda: |-
+      return false;
+    icon: mdi:thermometer-water
+
+sensor:
+  - platform: template
+    name: "Filtered Feelslike"
+    id: filtered_feelslike
+    internal: True
+    lambda: |-
+      return -100;
