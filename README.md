@@ -1,9 +1,19 @@
+## ESP-LG-Control: ESP Home based Modbus LG Heatpump controller 
+Control your LG Therma Heatpump through Home Assistant using an ESP32 with modbus connection.
+Copyright (C) 2025 altrnate32
+
+This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or any later version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License along with this program. If not, see <https://www.gnu.org/licenses/>.
+
 ## Hardware: Recommend to use this board:
 [Github Link](https://github.com/johanneswilkens/Heat-Pump-Controller-PCB)
 
 ## State of main branch: 
 Stable for over a year
-Functions wihtout issues in my setup for over a year. But remains experimental (so use at your own risk)
+Functions without issues in my setup for over a year. But remains experimental (so use at your own risk)
 
 ## Enable/Disable external thermostat/relays:
 If you are not using an external thermostat/pump/backup_heater choose the correct packages in esp-lg-control.yaml (lines 9-19).  
@@ -26,7 +36,8 @@ Example without external thermostat and without external relays:
 Also select to use external 'feelslike' temperature or not
 
 ## esp-lg-control -> Hobby project!
-ESP8266 based controller for LG Therma V Monoblock Unit.
+ESP32 based controller for LG Therma V Monoblock Unit.
+Will work on any ESPHome compatible chip, but recommend dual core ESP32
 Connects the LG to HomeAssistant and tries to optimise output modulation.
 Tested with 3-phase 14kW U34 version. So propably works at least with 12-14-16kW U34 3-phase models. May also work with 1-phase and U44 models (depending on modbus registers). But not tested.
 
@@ -68,4 +79,4 @@ Modbus communication is done through a rs485 to TTL converter based on the max48
 * Build
 
 ## Disclaimer
-This is an experimental script and will remain in beta stage (even though releases may not include beta designator). This is in no way finished software and should only be used by professionals. You are using this on your own riks. Do not use if you don't have any soldering/programming experience. Pull request are welcome!
+This is an experimental script and will remain in beta stage (even though releases may not include beta designator). This is in no way finished software and should only be used by professionals. You are using this at your own risk. Do not use if you don't have any soldering/programming experience. Pull request are welcome!
