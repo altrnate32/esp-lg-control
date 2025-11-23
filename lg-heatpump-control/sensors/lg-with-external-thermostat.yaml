@@ -1,5 +1,16 @@
+# Hysteresis control using two thermostats:
+# Thermostat1 (thermostat_signal) sets the upper limit (emergency stop) for heating.
+# Thermostat2 (thermostat_toon_signal) sets the lower limit (switch-on signal) for heating.
+# 
+# Example:
+# - Set Thermostat1 to 21°C (heating will turn OFF when temperature exceeds 21°C).
+# - Set Thermostat2 to 18.5°C (heating will turn ON when temperature drops below 18.5°C).
+# 
+# This creates a temperature range (hysteresis) where heating stays ON between 18.5°C and 21°C.
+# 
+# If using only one thermostat, connect both sensor inputs to the same GPIO pin for the same threshold.
 binary_sensor:
-  - platform: gpio # Thermostat input signal is connected to this input pin
+  - platform: gpio # Thermostat1 input signal is connected to this input pin
     pin:
       number: GPIO36
       inverted: true
@@ -10,4 +21,18 @@ binary_sensor:
     id: thermostat_signal
     filters:
       - delayed_on: 500ms # Debounce
+      - delayed_off: 500ms # Debounce
+    icon: mdi:thermostat
+  - platform: gpio # Thermostat2 input signal is connected to this input pin
+    pin:
+      number: GPIO39
+      inverted: true
+      mode:
+        input: true
+        pullup: false
+    name: "WP Toon Signal"
+    id: thermostat_toon_signal
+    filters:
+      - delayed_on: 500ms # Debounce
+      - delayed_off: 500ms # Debounce
     icon: mdi:thermostat

@@ -1,5 +1,5 @@
   enum states {NONE,INIT,IDLE,START,STARTING,STABILIZE,RUN,OVERSHOOT,STALL,WAIT,SWW,DEFROST,AFTERRUN,BACKUP_ONLY};
-  enum input_types {THERMOSTAT,THERMOSTAT_SENSOR,COMPRESSOR,SWW_RUN,DEFROST_RUN,OAT,STOOKLIJN_TARGET,TRACKING_VALUE,BOOST,BACKUP_HEAT,EXTERNAL_PUMP,RELAY_HEAT,TEMP_NEW_TARGET,WP_PUMP,SILENT_MODE,EMERGENCY,BACKUP_ONLY_SWITCH};
+  enum input_types {THERMOSTAT,THERMOSTAT_SENSOR,THERMOSTAT_SENSOR2,COMPRESSOR,SWW_RUN,DEFROST_RUN,OAT,STOOKLIJN_TARGET,TRACKING_VALUE,BOOST,BACKUP_HEAT,EXTERNAL_PUMP,RELAY_HEAT,TEMP_NEW_TARGET,WP_PUMP,SILENT_MODE,EMERGENCY,BACKUP_ONLY_SWITCH};
   struct input_struct {
     bool state = false;
     bool prev_state = false;
@@ -44,7 +44,7 @@
         bool silent_on_after_defrost = false;
         uint_fast32_t silent_after_defrost_start_time;
       public:
-        input_struct* input[17]; //list of all inputs
+        input_struct* input[18]; //list of all inputs
         bool entry_done = false;
         //default values, change these if you want
         const int boost_offset = 2; //number of degrees to raise stooklijn in boost mode
@@ -127,6 +127,7 @@
     //initialize the list with inputs
     input[THERMOSTAT] = new input_struct(&run_time_value);
     input[THERMOSTAT_SENSOR] = new input_struct(&run_time_value);
+    input[THERMOSTAT_SENSOR2] = new input_struct(&run_time_value);
     input[COMPRESSOR] = new input_struct(&run_time_value);
     input[SWW_RUN] = new input_struct(&run_time_value);
     input[DEFROST_RUN] = new input_struct(&run_time_value);
@@ -146,6 +147,7 @@
   state_machine_class::~ state_machine_class(){
     delete input[THERMOSTAT];
     delete input[THERMOSTAT_SENSOR];
+    delete input[THERMOSTAT_SENSOR2];
     delete input[COMPRESSOR];
     delete input[SWW_RUN];
     delete input[DEFROST_RUN];
@@ -218,7 +220,8 @@
   }
   //receive all values, booleans (states) or floats (values)
   void state_machine_class::receive_inputs(){
-    input[THERMOSTAT_SENSOR]->receive_state(id(thermostat_signal).state); //state of thermostat input
+    input[THERMOSTAT_SENSOR]->receive_state(id(thermostat_signal).state); //state of thermostat1 input
+    input[THERMOSTAT_SENSOR2]->receive_state(id(thermostat_toon_signal).state); //state of thermostat1 input
     input[THERMOSTAT]->receive_state(thermostat_state());
     input[COMPRESSOR]->receive_state(id(compressor_running).state); //is the compressor running
     input[SWW_RUN]->receive_state(id(sww_heating).state); //is the domestic hot water run active
@@ -266,6 +269,7 @@
   //set input.value.prev_value = input_value.value to remove the implicit 'value changed' flag
   void state_machine_class::unflag_input_values(){
     input[THERMOSTAT_SENSOR]->unflag();
+    input[THERMOSTAT_SENSOR2]->unflag();
     input[THERMOSTAT]->unflag();
     input[COMPRESSOR]->unflag();
     input[SWW_RUN]->unflag();
@@ -330,7 +334,7 @@
     //Add boost offset
     new_stooklijn_target = new_stooklijn_target + current_boost_offset;
     //Clamp target to minimum temp/max water+3
-    clamp(new_stooklijn_target,id(stooklijn_min_wtemp).state,id(stooklijn_max_wtemp).state+3);
+    new_stooklijn_target = clamp(new_stooklijn_target, id(stooklijn_min_wtemp).state, id(stooklijn_max_wtemp).state + 3);
     ESP_LOGD("calculate_stooklijn", "Stooklijn calculated with oat: %f, calc_base %f, Z: %f, C: %f offset: %f, result: %f",input[OAT]->value, oat_value, Z, C, id(wp_stooklijn_offset).state, new_stooklijn_target);
     //Publish new stooklijn value to watertemp value sensor
     id(watertemp_target).publish_state(new_stooklijn_target);
@@ -342,26 +346,40 @@
   //*******************Thermostat**********************************
   //***************************************************************
   bool state_machine_class::thermostat_state(){
-    //if sensor and thermostat are the same, just return
-    if(input[THERMOSTAT_SENSOR]->state == input[THERMOSTAT]->state) return input[THERMOSTAT]->state;
-    //instant on
-    if(state() == INIT && input[THERMOSTAT_SENSOR]->state) return true;
-    //thermostat change
-    if(input[THERMOSTAT_SENSOR]->state){
-      //state change is a switch to on
-      //check if on delay has passed
-      if(input[THERMOSTAT_SENSOR]->seconds_since_change() > (id(thermostat_on_delay).state*60)) return true;
-    } else {
-      //state change is a switch to off
-      //first check if minimum run time has passed
-      if((get_run_time() - run_start_time) > (id(minimum_run_time).state * 60)){
-        //check for instant off
-        if(!input[COMPRESSOR]->state || state() == SWW || state() == DEFROST) return false;
-        //check if off delay time has passed
-        if(input[THERMOSTAT_SENSOR]->seconds_since_change() > (id(thermostat_off_delay).state*60)) return false;
-      }      
+    // If both thermostat sensors are in the same state as the internal thermostat, just return the outcome (no change needed)
+    if(input[THERMOSTAT_SENSOR]->state == input[THERMOSTAT_SENSOR2]->state && input[THERMOSTAT_SENSOR]->state == input[THERMOSTAT]->state) {
+      return input[THERMOSTAT]->state;
     }
-    //return previous state
+    // Instant ON: If the system is in INIT state and THERMOSTAT_SENSOR2 (toon thermostat) is ON, turn heating ON
+    if(state() == INIT && input[THERMOSTAT_SENSOR2]->state) return true;
+    
+    // If the thermostat is ON, check for the emergency stop (THERMOSTAT_SENSOR) signal to switch OFF
+    if(input[THERMOSTAT]->state){
+      // First check if THERMOSTAT_SENSOR2 is OFF to avoid an immediate switch-on
+      if(!input[THERMOSTAT_SENSOR2]->state) {
+        // If THERMOSTAT_SENSOR (emergency stop) is OFF, check if the minimum runtime has passed
+        if(!input[THERMOSTAT_SENSOR]->state){
+          if((get_run_time() - run_start_time) > (id(minimum_run_time).state * 60)) {
+            // Check for instant OFF (compressor off, or special states like SWW or DEFROST)
+            if(!input[COMPRESSOR]->state || state() == SWW || state() == DEFROST) {
+              return false;  // Turn heating OFF
+            }
+            // Check if off delay time has passed
+            if(input[THERMOSTAT_SENSOR]->seconds_since_change() > (id(thermostat_off_delay).state * 60)) {
+              return false;  // Turn heating OFF
+            }
+          }
+        }
+      }
+    } else { // If the thermostat is OFF, check if THERMOSTAT_SENSOR2 (toon thermostat) is ON
+      if(input[THERMOSTAT_SENSOR2]->state) {
+        // Check if on delay has passed
+        if(input[THERMOSTAT_SENSOR2]->seconds_since_change() > (id(thermostat_on_delay).state * 60)) {
+         return true;  // Turn heating ON
+        }
+      }
+    }
+    //default: return previous state
     return input[THERMOSTAT]->state;
   }
   //***************************************************************
