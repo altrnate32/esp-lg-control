@@ -372,7 +372,8 @@
         }
       }
     } else { // If the thermostat is OFF, check if THERMOSTAT_SENSOR2 (toon thermostat) is ON
-      if(input[THERMOSTAT_SENSOR2]->state) {
+      //Aslo check if THermostat is on (emergency stop) to prevent instant stop again after minimum runtime
+      if(input[THERMOSTAT_SENSOR2]->state&&input[THERMOSTAT_SENSOR]->state) {
         // Check if on delay has passed
         if(input[THERMOSTAT_SENSOR2]->seconds_since_change() > (id(thermostat_on_delay).state * 60)) {
          return true;  // Turn heating ON
@@ -646,19 +647,19 @@
     return new_target;
   }
   void state_machine_class::set_safe_new_target(float new_target){
-    float prev_target = new_target;
+    float unchanged_target = new_target;
     //set a target that keeps a margin of at least 0.3 to the hysteresis
     if(new_target != input[TEMP_NEW_TARGET]->value){
       //don't allow a value below tracking_value-hysteresis+0.3
-      if(new_target < (input[TRACKING_VALUE]->value-hysteresis+0.3)) new_target = ceil(input[TRACKING_VALUE]->value-hysteresis+0.3);
+      if(new_target < (input[TRACKING_VALUE]->value-hysteresis+0.3)) new_target = ceilf(input[TRACKING_VALUE]->value-hysteresis+0.3);
       //also not below minimum watertemp -2
       if(new_target < (id(stooklijn_min_wtemp).state - 2)) new_target = (id(stooklijn_min_wtemp).state - 2);
       //and not above max overshoot
       if(new_target > input[STOOKLIJN_TARGET]->value + max_overshoot) new_target = input[STOOKLIJN_TARGET]->value + max_overshoot;
       input[TEMP_NEW_TARGET]->receive_value(new_target);
     }
-    if(prev_target != new_target){
-      ESP_LOGD(state_name(), "set_safe_target adjusted target from: %f to %f",prev_target,new_target);
+    if(unchanged_target != new_target){
+      ESP_LOGD(state_name(), "set_safe_target adjusted target from: %f to %f",unchanged_target,new_target);
     }
   }
   void state_machine_class::set_unsafe_new_target(float new_target){

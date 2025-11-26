@@ -407,20 +407,20 @@ lambda: !lambda |-
           if((fsm.delta + (fsm.derivative_D_5*30)) < 0){
             //it will not be fixed next 30 minutes, take a big step
             //current target + 3 or tracking value, whichever is higher
-            fsm.set_safe_new_target(max(ceil(fsm.input[TRACKING_VALUE]->value),fsm.input[TEMP_NEW_TARGET]->value + 3)); 
+            fsm.set_safe_new_target(fmaxf(ceilf(fsm.input[TRACKING_VALUE]->value),fsm.input[TEMP_NEW_TARGET]->value + 3)); 
           } else {
             //current target + 1 or tracking value, whichever is higher
-            fsm.set_safe_new_target(max(ceil(fsm.input[TRACKING_VALUE]->value),fsm.input[TEMP_NEW_TARGET]->value  + 1));
+            fsm.set_safe_new_target(fmaxf(ceilf(fsm.input[TRACKING_VALUE]->value),fsm.input[TEMP_NEW_TARGET]->value  + 1));
           }
           //but not above stooklijn_target (yet)
-          fsm.set_safe_new_target(min(fsm.input[STOOKLIJN_TARGET]->value,fsm.input[TEMP_NEW_TARGET]->value));
+          fsm.set_safe_new_target(fminf(fsm.input[STOOKLIJN_TARGET]->value,fsm.input[TEMP_NEW_TARGET]->value));
           ESP_LOGD(fsm.state_name(), "Operating below target, raising target, pendel_target: %f",fsm.input[TEMP_NEW_TARGET]->value);
           break;
         }
         //4: We are operating at target, are we modulating?
         if(fsm.compressor_modulation() && fsm.input[TEMP_NEW_TARGET]->value < fsm.input[STOOKLIJN_TARGET]->value+3 && id(change_target_stall).state){
           //raise target above stooklijn target to stop modulation
-          fsm.set_safe_new_target(min(fsm.input[STOOKLIJN_TARGET]->value+3,ceil(fsm.input[TRACKING_VALUE]->value) + 3));
+          fsm.set_safe_new_target(fminf(fsm.input[STOOKLIJN_TARGET]->value+3,ceilf(fsm.input[TRACKING_VALUE]->value) + 3));
           ESP_LOGD(fsm.state_name(), "Modulating, raising target, pendel_target: %f",fsm.input[TEMP_NEW_TARGET]->value);
           break;
         }
