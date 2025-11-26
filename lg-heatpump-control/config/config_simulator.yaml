@@ -2,7 +2,7 @@
 esp32:
   board: esp32dev
   framework:
-    type: arduino
+    type: esp-idf
 # Enable Home Assistant API
 # Set encryption key
 api:
@@ -10,7 +10,8 @@ api:
     key: !secret sim_api_key
 # Set an ota password
 ota:
-  password: !secret sim_ota_password
+  - platform: esphome
+    password: !secret sim_ota_password
 
 wifi:
   ssid: !secret sim_wifi_ssid
