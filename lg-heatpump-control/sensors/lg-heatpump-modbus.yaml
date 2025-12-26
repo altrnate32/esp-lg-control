@@ -382,7 +382,7 @@ sensor:
     state_class: "measurement"
     accuracy_decimals: 1
     lambda: |-
-      return (float)(id(water_temp_retour).state-0.4); 
+      return (float)(id(water_temp_retour).state+0.4); 
     update_interval: 30s
     icon: mdi:thermometer-chevron-down
   - platform: template
@@ -404,7 +404,7 @@ sensor:
     state_class: "measurement"
     accuracy_decimals: 1
     lambda: |-
-      return (float)(id(water_temp_aanvoer).state+0.5); 
+      return (float)(id(water_temp_aanvoer).state+1.0); 
     update_interval: 30s
     icon: mdi:thermometer-chevron-up
   - platform: template

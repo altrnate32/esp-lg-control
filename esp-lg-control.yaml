@@ -4,7 +4,7 @@ substitutions:
 packages:
   config_values: !include lg-heatpump-control/config/config.yaml
   lg_modbus: !include lg-heatpump-control/sensors/lg-heatpump-modbus.yaml #include file with modbus sensors
-  lg_dallas_temp: !include lg-heatpump-control/sensors/lg-dallas-temp.yaml #optional file with dallas temp probes (disable if not used)
+  #lg_dallas_temp: !include lg-heatpump-control/sensors/lg-dallas-temp.yaml #optional file with dallas temp probes (disable if not used)
   
   #Choose correct version of below two files. Always enable (by uncommenting) only one of the two
   #*****

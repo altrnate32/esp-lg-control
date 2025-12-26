@@ -388,9 +388,9 @@ lambda: !lambda |-
           break;
         }
         
-        //2: check if below stooklijn target, with delta > 0 and modulating
+        //2: check if below stooklijn target, with delta > 0
         // (usually target change (boost) or after start). No minimum waiting time
-        if(fsm.input[TEMP_NEW_TARGET]->value < fsm.input[STOOKLIJN_TARGET]->value && fsm.delta > 0 && fsm.compressor_modulation()){
+        if(fsm.input[TEMP_NEW_TARGET]->value < fsm.input[STOOKLIJN_TARGET]->value && fsm.delta > 0){
           fsm.set_safe_new_target(fsm.input[STOOKLIJN_TARGET]->value); 
           break;
         }
