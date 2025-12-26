@@ -1,6 +1,264 @@
 one_wire:
   - platform: gpio
-    pin:
-      number: GPIO15
+    pin: GPIO15
 
 sensor:
+  - platform: dallas_temp
+    update_interval: 120s
+    address: 0x4a0122113a9bd528
+    name: "WPB Bottom Temperature"
+    id: wpb_bottom_temperature
+    icon: mdi:arrow-collapse-down
+  - platform: template
+    name: "Rounded WPB Bottom Temperature"
+    id: rounded_wpb_bottom_temperature
+    device_class: "temperature"
+    unit_of_measurement: "°C"
+    state_class: "measurement"
+    accuracy_decimals: 1
+    lambda: |-
+      return (float)(floor((id(wpb_bottom_temperature).state*2)+0.5)/2);
+    update_interval: 60s
+    icon: mdi:arrow-collapse-down
+  - platform: dallas_temp
+    update_interval: 120s
+    address: 0xb9012211506ebf28
+    name: "WPB Top Temperature"
+    id: wpb_top_temperature
+    device_class: "temperature"
+    unit_of_measurement: "°C"
+    state_class: "measurement"
+    icon: mdi:arrow-collapse-up
+  - platform: template
+    name: "Rounded WPB Top Temperature"
+    id: rounded_wpb_top_temperature
+    device_class: "temperature"
+    unit_of_measurement: "°C"
+    state_class: "measurement"
+    accuracy_decimals: 1
+    lambda: |-
+      return (float)(floor((id(wpb_top_temperature).state*2)+0.5)/2);
+    update_interval: 60s
+    icon: mdi:arrow-collapse-up
+  - platform: dallas_temp
+    update_interval: 120s
+    address: 0xbb03059497154628
+    id: sww_supply_temperature
+    device_class: "temperature"
+    unit_of_measurement: "°C"
+    state_class: "measurement"
+    name: "SWW Supply Temperature"
+    icon: mdi:faucet
+  - platform: template
+    name: "Rounded SWW Supply Temperature"
+    id: rounded_sww_supply_temperature
+    device_class: "temperature"
+    unit_of_measurement: "°C"
+    state_class: "measurement"
+    accuracy_decimals: 1
+    lambda: |-
+      return (float)(floor((id(sww_supply_temperature).state*2)+0.5)/2);
+    update_interval: 60s
+    icon: mdi:faucet
+  - platform: dallas_temp
+    address: 0x0a03049497049628
+    name: "WP Supply Temperature"
+    update_interval: 30s
+    id: wp_out_temp
+    device_class: "temperature"
+    unit_of_measurement: "°C"
+    state_class: "measurement"
+    filters:
+      - offset: 0.0
+      - calibrate_linear:
+          - 30.0 -> 30.2
+          - 44.6 -> 47
+    icon: mdi:thermometer-chevron-up
+  - platform: template
+    name: "Rounded WP Supply Temperature"
+    id: rounded_wpb_out_temp
+    device_class: "temperature"
+    unit_of_measurement: "°C"
+    state_class: "measurement"
+    accuracy_decimals: 1
+    lambda: |-
+      return (float)(floor((id(wp_out_temp).state*2)+0.5)/2);
+    update_interval: 30s
+    icon: mdi:thermometer-chevron-up
+  - platform: dallas_temp
+    update_interval: 60s
+    address: 0xd10122112fc5ee28
+    name: "Buffer Top Supply Temperature"
+    id: buffer_top_supply_temp
+    device_class: "temperature"
+    unit_of_measurement: "°C"
+    state_class: "measurement"
+    filters:
+      - offset: 0.0
+      - calibrate_linear:
+          - 30.0 -> 32.7
+          - 39.3 -> 47
+    icon: mdi:alpha-t-circle-outline
+  - platform: template
+    name: "Rounded Buffer Top Supply Temperature"
+    id: rounded_buffer_top_supply_temp
+    device_class: "temperature"
+    unit_of_measurement: "°C"
+    state_class: "measurement"
+    accuracy_decimals: 1
+    lambda: |-
+      return (float)(floor((id(buffer_top_supply_temp).state*2)+0.5)/2);
+    update_interval: 60s
+    icon: mdi:alpha-t-circle-outline
+  - platform: dallas_temp
+    update_interval: 120s
+    address: 0xe101221102a46b28
+    name: "Buffer Top Temperature"
+    device_class: "temperature"
+    unit_of_measurement: "°C"
+    state_class: "measurement"
+    id: buffer_top_temp
+    icon: mdi:fridge-top
+    filters:
+      - offset: -0.3
+  - platform: template
+    name: "Rounded Buffer Top Temperature"
+    id: rounded_buffer_top_temp
+    device_class: "temperature"
+    unit_of_measurement: "°C"
+    state_class: "measurement"
+    accuracy_decimals: 1
+    lambda: |-
+      return (float)(floor((id(buffer_top_temp).state*2)+0.5)/2);
+    update_interval: 60s
+    icon: mdi:fridge-top
+  - platform: dallas_temp
+    address: 0x38030794971a4a28
+    update_interval: 60s
+    name: "CV Supply Temperature"
+    id: cv_supply_temp
+    device_class: "temperature"
+    unit_of_measurement: "°C"
+    state_class: "measurement"
+    filters:
+      - offset: 0.0
+      - calibrate_linear:
+          - 30.0 -> 30.7
+          - 42.8 -> 47
+    icon: mdi:radiator
+  - platform: template
+    name: "Rounded CV Supply Temperature"
+    id: rounded_cv_supply_temp
+    device_class: "temperature"
+    unit_of_measurement: "°C"
+    state_class: "measurement"
+    accuracy_decimals: 1
+    lambda: |-
+      return (float)(floor((id(cv_supply_temp).state*2)+0.5)/2);
+    update_interval: 60s
+    icon: mdi:radiator
+  - platform: dallas_temp
+    update_interval: 60s
+    address: 0x4503059497174a28
+    name: "CV Return Temperature"
+    id: cv_return_temp
+    device_class: "temperature"
+    unit_of_measurement: "°C"
+    state_class: "measurement"
+    filters:
+      - offset: 0.0
+      - calibrate_linear:
+          - 30.0 -> 30.5
+          - 35.7 -> 39.5
+    icon: mdi:radiator-disabled
+  - platform: template
+    name: "Rounded CV Return Temperature"
+    id: rounded_cv_return_temp
+    device_class: "temperature"
+    unit_of_measurement: "°C"
+    state_class: "measurement"
+    accuracy_decimals: 1
+    lambda: |-
+      return (float)(floor((id(cv_return_temp).state*2)+0.5)/2);
+    update_interval: 60s
+    icon: mdi:radiator-disabled
+  - platform: dallas_temp
+    update_interval: 60s
+    address: 0xf30310949740b428
+    id: buffer_bottom_supply_temp
+    name: "Buffer Bottom Supply Temperature"
+    filters:
+      - offset: 0.0
+      - calibrate_linear:
+          - 30.0 -> 34.0
+          - 37.5 -> 46.0
+    icon: mdi:alpha-t-circle-outline
+  - platform: template
+    name: "Rounded Buffer Bottom Supply Temperature"
+    id: rounded_buffer_bottom_supply_temp
+    device_class: "temperature"
+    unit_of_measurement: "°C"
+    state_class: "measurement"
+    accuracy_decimals: 1
+    lambda: |-
+      return (float)(floor((id(buffer_bottom_supply_temp).state*2)+0.5)/2);
+    update_interval: 60s
+    icon: mdi:alpha-t-circle-outline
+  - platform: dallas_temp
+    update_interval: 120s
+    address: 0xd7000801c04e3210
+    name: "Buffer Bottom Temperature"
+    id: buffer_bottom_temp
+    device_class: "temperature"
+    unit_of_measurement: "°C"
+    state_class: "measurement"
+    icon: mdi:fridge-bottom
+    filters:
+      - offset: 0.4
+  - platform: template
+    name: "Rounded Buffer Bottom Temperature"
+    id: rounded_buffer_bottom_temp
+    device_class: "temperature"
+    unit_of_measurement: "°C"
+    state_class: "measurement"
+    accuracy_decimals: 1
+    lambda: |-
+      return (float)(floor((id(buffer_bottom_temp).state*2)+0.5)/2);
+    update_interval: 60s
+    icon: mdi:fridge-bottom
+  - platform: dallas_temp
+    address: 0x2403069794065c28
+    name: "WP Return Temperature"
+    update_interval: 30s
+    id: wp_return_temp
+    device_class: "temperature"
+    unit_of_measurement: "°C"
+    state_class: "measurement"
+    filters:
+      - offset: 0.0
+      - calibrate_linear:
+          - 30.0 -> 33.6
+          - 35.2 -> 38.8
+    icon: mdi:alpha-t-circle-outline
+  - platform: template
+    name: "Rounded WP Return Temperature"
+    id: rounded_wp_return_temp
+    device_class: "temperature"
+    unit_of_measurement: "°C"
+    state_class: "measurement"
+    accuracy_decimals: 1
+    lambda: |-
+      return (float)(floor((id(wp_return_temp).state*2)+0.5)/2);
+    update_interval: 30s
+    icon: mdi:alpha-t-circle-outline
+  - platform: template
+    name: "CV Delta T"
+    id: cv_delta_t
+    device_class: "temperature"
+    state_class: "measurement"
+    unit_of_measurement: "K"
+    accuracy_decimals: 1
+    lambda: |-
+      return (float)(id(cv_supply_temp).state-id(cv_return_temp).state);
+    update_interval: 30s
+    icon: mdi:delta
