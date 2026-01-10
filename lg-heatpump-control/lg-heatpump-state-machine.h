@@ -28,7 +28,7 @@
         std::vector<float> derivative; //vector of floats to integrate derivative (used in control logic)
         float stooklijn_error_integral = 0; //to provide 'degree minutes' sensor data
         float target_error_integral = 0; //to provide 'degree minutes' sensor data
-        const float feelslike_factor = 0.4; //the factor used when using feelslike factor for stooklijn calculations
+        const float feelslike_factor = 0.25; //the factor used when using feelslike factor for stooklijn calculations
         bool backup_heat_temp_limit_trigger = false; //if backup heat triggered due to low temperature (always on)?
         bool update_stooklijn_bool = true;
         //backup_heat_mode select
@@ -47,7 +47,7 @@
         input_struct* input[18]; //list of all inputs
         bool entry_done = false;
         //default values, change these if you want
-        const int boost_offset = 2; //number of degrees to raise stooklijn in boost mode
+        const int boost_offset = 1; //number of degrees to raise stooklijn in boost mode
         const int hysteresis = 4; //Set controller control mode to 'outlet' and set hysteresis to the setting you have on the controller (recommend 4)
         int max_overshoot = 5; //maximum allowable overshoot in 'OVERSHOOT' state
         int alive_timer = 120; //interval in seconds for an 'alive' message in the logs

@@ -95,7 +95,7 @@ number:
     max_value: 0
     step: 1
     restore_value: yes
-    initial_value: -5
+    initial_value: -8
     unit_of_measurement: "°C"
     optimistic: true
     icon: mdi:download-circle-outline
@@ -110,7 +110,7 @@ number:
     max_value: 60
     step: 1
     restore_value: yes
-    initial_value: 44
+    initial_value: 45
     unit_of_measurement: "°C"
     optimistic: true
     icon: mdi:waves-arrow-right
@@ -125,7 +125,7 @@ number:
     max_value: 40
     step: 1
     restore_value: yes
-    initial_value: 24
+    initial_value: 27
     unit_of_measurement: "°C"
     optimistic: true
     icon: mdi:waves-arrow-left
@@ -140,7 +140,7 @@ number:
     max_value: 20
     step: 1
     restore_value: yes
-    initial_value: 20
+    initial_value: 11
     unit_of_measurement: "°C"
     optimistic: true
     icon: mdi:waves-arrow-left
@@ -188,7 +188,7 @@ number:
     max_value: 20
     step: 1
     restore_value: yes
-    initial_value: 6
+    initial_value: 5
     unit_of_measurement: "°C"
     optimistic: true
     icon: mdi:volume-off
