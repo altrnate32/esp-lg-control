@@ -260,7 +260,7 @@ select:
     on_value:
       then:
         lambda: !lambda |-
-            fsm.proces_selects();
+            fsm.process_selects();
   - platform: template
     name: "Backup Heat Auto On"
     id: backup_heat_mode
@@ -278,7 +278,7 @@ select:
     on_value:
       then:
         lambda: !lambda |-
-            fsm.proces_selects();
+            fsm.process_selects();
   - platform: template
     name: "Backup Heat: Disable HP"
     id: backup_heat_only_mode
@@ -291,7 +291,7 @@ select:
     on_value:
       then:
         lambda: !lambda |-
-            fsm.proces_selects();
+            fsm.process_selects();
 switch:
   - platform: template
     name: "Enable Silent After Defrost"

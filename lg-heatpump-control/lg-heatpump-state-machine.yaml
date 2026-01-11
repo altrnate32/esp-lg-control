@@ -56,10 +56,11 @@ lambda: !lambda |-
         id(filtered_oat).publish_state(id(buiten_temp).state);
         //after timeout
         fsm.receive_inputs();
-        fsm.proces_selects();
+        fsm.process_selects();
         //check for fast_start
         //the 3 places where thermostat event does not lead to a switch off. Therefore not handled through check_change_events
         if(fsm.input[THERMOSTAT]->state) {
+          fsm.set_run_start_time();
           fsm.state_transition(START);
           id(controller_info).publish_state("Init complete. First state: START");
         } else {
@@ -135,6 +136,7 @@ lambda: !lambda |-
 
         fsm.start_events();
         fsm.add_event(BACKUP_ONLY_SWITCH);
+        fsm.add_event(BACKUP_LOW_TEMP);
         if(fsm.check_change_events()) break;
         
         //three minutes delay to allow pump to run and values to stabilise 
@@ -165,6 +167,7 @@ lambda: !lambda |-
         fsm.add_event(THERMOSTAT);
         fsm.add_event(RELAY_HEAT);
         fsm.add_event(BACKUP_ONLY_SWITCH);
+        fsm.add_event(BACKUP_LOW_TEMP);
         if(fsm.check_change_events()) break;
 
         if(fsm.input[COMPRESSOR]->state){
@@ -206,6 +209,7 @@ lambda: !lambda |-
         fsm.add_event(RELAY_HEAT);
         fsm.add_event(COMPRESSOR);
         fsm.add_event(BACKUP_ONLY_SWITCH);
+        fsm.add_event(BACKUP_LOW_TEMP);
         if(fsm.check_change_events()) break;
 
         //check how far we are in the run
@@ -248,11 +252,13 @@ lambda: !lambda |-
         fsm.add_event(EMERGENCY);
         fsm.add_event(BACKUP_HEAT);
         fsm.add_event(BACKUP_ONLY_SWITCH);
+        fsm.add_event(BACKUP_LOW_TEMP);
         if(fsm.check_change_events()) break;
         
         //check low TEMP (for backup_heat_always_on)
-        if(fsm.check_low_temp_trigger() && fsm.input[BACKUP_HEAT]->seconds_since_change() > (15*60)) {
-          fsm.backup_heat(true,true);
+        if(fsm.check_low_temp_trigger() && fsm.get_backup_heat_lowtemp() && fsm.input[BACKUP_HEAT]->seconds_since_change() > (15*60)) {
+          fsm.set_backup_heat_temp_limit_trigger();
+          fsm.state_transition(BACKUP_ONLY);
         } else if(!fsm.get_backup_heat_temp_limit_trigger()){
           //backup heat is not on due to low temp, no reason for it to be on
           fsm.backup_heat(false);
@@ -311,6 +317,7 @@ lambda: !lambda |-
         fsm.add_event(RELAY_HEAT);
         fsm.add_event(COMPRESSOR);
         fsm.add_event(BACKUP_ONLY_SWITCH);
+        fsm.add_event(BACKUP_LOW_TEMP);
         if(fsm.check_change_events()) break;
 
         if(fsm.delta < 1 && fsm.pred_20_delta_5 < 1.5 && fsm.pred_20_delta_10 < 1.5 ){
@@ -370,11 +377,13 @@ lambda: !lambda |-
         fsm.add_event(EMERGENCY);
         fsm.add_event(BACKUP_HEAT);
         fsm.add_event(BACKUP_ONLY_SWITCH);
+        fsm.add_event(BACKUP_LOW_TEMP);
         if(fsm.check_change_events()) break;
         
         //check low temp (for backup_heat_always_on)
-        if(fsm.check_low_temp_trigger() && fsm.input[BACKUP_HEAT]->seconds_since_change() > (15*60)) {
-          fsm.backup_heat(true,true);
+        if(fsm.check_low_temp_trigger() && fsm.get_backup_heat_lowtemp() && fsm.input[BACKUP_HEAT]->seconds_since_change() > (15*60)) {
+          fsm.set_backup_heat_temp_limit_trigger();
+          fsm.state_transition(BACKUP_ONLY);
         }
 
         //1: check if recovered
@@ -468,6 +477,7 @@ lambda: !lambda |-
         fsm.add_event(THERMOSTAT);
         fsm.add_event(RELAY_HEAT);
         fsm.add_event(BACKUP_ONLY_SWITCH);
+        fsm.add_event(BACKUP_LOW_TEMP);
         if(fsm.check_change_events()) break;
         
         //compressor started, so system temp is within range set realistic startup target
@@ -484,6 +494,10 @@ lambda: !lambda |-
           fsm.state_transition(RUN);
           id(controller_info).publish_state("Compressor on again; Wait is over");
           break;
+        }
+        //maximum wait time, before we return to IDLE
+        if(fsm.seconds_since_state_start() > (30*60)){
+          fsm.state_transition(IDLE);
         }
         break;
       }
@@ -627,6 +641,7 @@ lambda: !lambda |-
         fsm.start_events();
         fsm.add_event(THERMOSTAT);
         fsm.add_event(BACKUP_ONLY_SWITCH);
+        fsm.add_event(BACKUP_LOW_TEMP);
         if(fsm.check_change_events()) break;
         break;
       }

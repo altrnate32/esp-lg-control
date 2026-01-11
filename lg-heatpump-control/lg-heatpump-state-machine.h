@@ -1,11 +1,11 @@
   enum states {NONE,INIT,IDLE,START,STARTING,STABILIZE,RUN,OVERSHOOT,STALL,WAIT,SWW,DEFROST,AFTERRUN,BACKUP_ONLY};
-  enum input_types {THERMOSTAT,THERMOSTAT_SENSOR,THERMOSTAT_SENSOR2,COMPRESSOR,SWW_RUN,DEFROST_RUN,OAT,STOOKLIJN_TARGET,TRACKING_VALUE,BOOST,BACKUP_HEAT,EXTERNAL_PUMP,RELAY_HEAT,TEMP_NEW_TARGET,WP_PUMP,SILENT_MODE,EMERGENCY,BACKUP_ONLY_SWITCH};
+  enum input_types {THERMOSTAT,THERMOSTAT_SENSOR,THERMOSTAT_SENSOR2,COMPRESSOR,SWW_RUN,DEFROST_RUN,OAT,STOOKLIJN_TARGET,TRACKING_VALUE,BOOST,BACKUP_HEAT,EXTERNAL_PUMP,RELAY_HEAT,TEMP_NEW_TARGET,WP_PUMP,SILENT_MODE,EMERGENCY,BACKUP_ONLY_SWITCH,BACKUP_LOW_TEMP};
   struct input_struct {
     bool state = false;
     bool prev_state = false;
     float value = 0.0;
     float prev_value = 0.0;
-    uint_fast32_t input_change_time;
+    uint_fast32_t input_change_time = 0;
     uint_fast32_t* run_time;
     input_struct(uint_fast32_t* run_time_pointer);
     void receive_state(bool new_state);
@@ -44,7 +44,7 @@
         bool silent_on_after_defrost = false;
         uint_fast32_t silent_after_defrost_start_time;
       public:
-        input_struct* input[18]; //list of all inputs
+        input_struct* input[19]; //list of all inputs
         bool entry_done = false;
         //default values, change these if you want
         const int boost_offset = 1; //number of degrees to raise stooklijn in boost mode
@@ -83,8 +83,11 @@
         void calculate_integral(float tracking_value, float stooklijn_target, float wp_target);
         void heat(bool mode);
         void external_pump(bool mode);
-        void backup_heat(bool mode,bool temp_limit_trigger = false);
+        void backup_heat(bool mode);
         bool get_backup_heat_temp_limit_trigger();
+        void reset_backup_heat_temp_limit_trigger();
+        void set_backup_heat_temp_limit_trigger();
+        bool get_backup_heat_lowtemp();
         void boost(bool mode);
         void toggle_boost();
         void silent_mode(bool mode);
@@ -100,7 +103,7 @@
         bool compressor_modulation();
         bool check_low_temp_trigger();
         void set_target_temp(float target);
-        void proces_selects();
+        void process_selects();
     };
   input_struct::input_struct(uint_fast32_t* run_time_pointer){
     run_time = run_time_pointer;
@@ -143,6 +146,7 @@
     input[SILENT_MODE] = new input_struct(&run_time_value);
     input[EMERGENCY] = new input_struct(&run_time_value);
     input[BACKUP_ONLY_SWITCH] = new input_struct(&run_time_value);
+    input[BACKUP_LOW_TEMP] = new input_struct(&run_time_value);
   }
   state_machine_class::~ state_machine_class(){
     delete input[THERMOSTAT];
@@ -163,6 +167,7 @@
     delete input[SILENT_MODE];
     delete input[EMERGENCY];
     delete input[BACKUP_ONLY_SWITCH];
+    delete input[BACKUP_LOW_TEMP];
   }
   void state_machine_class::update_stooklijn(){
     update_stooklijn_bool = true;
@@ -187,6 +192,7 @@
       state_start_time = get_run_time();
       entry_done = false;
       id(controller_state).publish_state(state_name());
+      next_state = NONE;
       ESP_LOGD(state_name(),"State transition complete-> %s",state_name());
     }
   }
@@ -286,6 +292,7 @@
     input[SILENT_MODE]->unflag();
     input[EMERGENCY]->unflag();
     input[BACKUP_ONLY_SWITCH]->unflag();
+    input[BACKUP_LOW_TEMP]->unflag();
   }
   //***************************************************************
   //*******************Stooklijn***********************************
@@ -389,7 +396,7 @@
   void state_machine_class::calculate_derivative(float tracking_value){
     float d_number = tracking_value;
     derivative.push_back(d_number);
-    //limit size to 31 elements(15 minutes)
+    //limit size to 31 elements(15 minutes) based on 2 samples/minute
     if(derivative.size() > 31) derivative.erase(derivative.begin());
     //calculate current derivative for 5 and 10 minutes
     //derivative is measured in degrees/minute
@@ -485,29 +492,36 @@
   bool state_machine_class::get_backup_heat_temp_limit_trigger(){
     return backup_heat_temp_limit_trigger;
   }
-  void state_machine_class::backup_heat(bool mode,bool temp_limit_trigger){
+  bool state_machine_class::get_backup_heat_lowtemp(){
+    return backup_heat_lowtemp;
+  }
+  void state_machine_class::set_backup_heat_temp_limit_trigger(){
+    backup_heat_temp_limit_trigger = true;
+  }
+  void state_machine_class::reset_backup_heat_temp_limit_trigger(){
+    backup_heat_temp_limit_trigger = false;
+  }
+  
+  void state_machine_class::backup_heat(bool mode){
     if(mode){
-      //relay heat must be on, OR BACKUP_ONLY_SWITCH otherwise it is an invalid request
-      if(!input[RELAY_HEAT]->state && !input[BACKUP_ONLY_SWITCH]->state){
+      //relay heat must be on, OR BACKUP_ONLY_SWITCH, or in BACKUP_ONLY state otherwise it is an invalid request
+      if(!input[RELAY_HEAT]->state && !input[BACKUP_ONLY_SWITCH]->state && state() != BACKUP_ONLY){
         //do not turn on
         ESP_LOGD(state_name(),"Invalid configuration relay_backup_heat on before relay_heat.");
         id(controller_info).publish_state("ERROR: backup_heat on before heat.");
       } else {
         if(!id(relay_backup_heat).state){
-          backup_heat_temp_limit_trigger = false;
-          if(temp_limit_trigger) {
-            if(!backup_heat_lowtemp) return;
-            backup_heat_temp_limit_trigger = true;
+          if(get_backup_heat_temp_limit_trigger()) {
+            if(!backup_heat_lowtemp) return; //invalid call
             id(controller_info).publish_state("Backup heat on due to low temp");
-            if(backup_heat_only_enabled) state_transition(BACKUP_ONLY);
           } else if(input[SWW_RUN]->state) {
-            if(!backup_heat_sww) return;
+            if(!backup_heat_sww) return; //invalid call
             id(controller_info).publish_state("Backup heat on due to SWW run");
           } else if(input[DEFROST_RUN]->state) {
-            if(!backup_heat_defrost) return;
+            if(!backup_heat_defrost) return; //invalid call
             id(controller_info).publish_state("Backup heat on due to Defrost");
           } else if(state() == STALL){
-            if(!backup_heat_stall) return;
+            if(!backup_heat_stall) return; //invalid call
             id(controller_info).publish_state("Backup heat on due to STALL");
           } else if(state() == BACKUP_ONLY||input[BACKUP_ONLY_SWITCH]->state){
             id(controller_info).publish_state("Backup heat on due to BACKUP_HEAT_ONLY");
@@ -597,7 +611,6 @@
           silent_mode(false);
         }
       }
-    
     } else if(input[OAT]->value <= id(oat_silent_always_off).state){
       if(input[SILENT_MODE]->state){
         ESP_LOGD(state_name(),"Oat < oat_silent_always_off Switching silent mode off");
@@ -730,34 +743,48 @@
         }
       } else if(*it == BACKUP_HEAT){
         if(input[BACKUP_HEAT]->state){
+          // Turn off if no heat request
           if(!input[RELAY_HEAT]->state || !input[THERMOSTAT]->state) {
             heat(false);
             backup_heat(false);
             ESP_LOGD(state_name(),"Backup heat off no heat request (relay_heat off)");
             id(controller_info).publish_state("Backup heat off due to no heat request");
           } else if(input[OAT]->value > id(backup_heater_active_temp).state){
+            // Turn off if outside air temp exceeds activation threshold
             backup_heat(false);
             ESP_LOGD(state_name(),"Backup heat off input[OAT]->value > backup_heater_active_temp");
             id(controller_info).publish_state("Backup heat off due to high oat");
-          } else if(backup_heat_temp_limit_trigger && input[OAT]->value > id(backup_heater_always_on_temp).state){
-            //if triggered due to low temp and situation improved (with some hysteresis)
-            backup_heat(false);
-            ESP_LOGD(state_name(),"Backup heat off due to temperature improved");
-            id(controller_info).publish_state("Backup heat off due to temperature improvement");
           }
         }
       } else if(*it == BACKUP_ONLY_SWITCH){
-        if (input[BACKUP_ONLY_SWITCH]->state && state() != BACKUP_ONLY && backup_heat_only_enabled){
-          state_transition(BACKUP_ONLY);
-          id(controller_info).publish_state("Backup heat Only");
-        } else if(state() == BACKUP_ONLY && !input[BACKUP_ONLY_SWITCH]->state){
-          if(input[THERMOSTAT]->state) state_transition(START);
-          else state_transition(AFTERRUN);
-        } else if(backup_heat_temp_limit_trigger && input[OAT]->value > id(backup_heater_always_on_temp).state){
-          //if triggered due to low temp and situation improved (with some hysteresis)
-          input[BACKUP_ONLY_SWITCH]->receive_state(false);
-          if(input[THERMOSTAT]->state) state_transition(START);
-          else state_transition(AFTERRUN);
+        if(state() == BACKUP_ONLY){
+          if(!backup_heat_temp_limit_trigger && !input[BACKUP_ONLY_SWITCH]->state){
+            //if not triggered by low temp (so probably triggered by backup_only_switch) and backup_only_switch switched off
+            if(input[THERMOSTAT]->state) state_transition(START);
+            else state_transition(AFTERRUN);
+          }
+        } else {
+          if(input[BACKUP_ONLY_SWITCH]->state && backup_heat_only_enabled){
+            state_transition(BACKUP_ONLY);
+            id(controller_info).publish_state("Backup heat Only");
+          }
+        }
+      } else if(*it == BACKUP_LOW_TEMP){
+        if(state() == BACKUP_ONLY){
+          if(backup_heat_temp_limit_trigger && input[OAT]->value > id(backup_heater_always_on_temp).state + 1){
+            //if triggered due to low temp and situation improved (with one degree hysteresis)
+            input[BACKUP_ONLY_SWITCH]->receive_state(false);
+            reset_backup_heat_temp_limit_trigger();
+            if(input[THERMOSTAT]->state) state_transition(START);
+            else state_transition(AFTERRUN);
+            ESP_LOGD(state_name(), "Backup heat OFF: low-temp trigger cleared, exiting BACKUP_ONLY");
+          }
+        } else {
+          if(check_low_temp_trigger() && get_backup_heat_lowtemp()) {
+            set_backup_heat_temp_limit_trigger();
+            state_transition(BACKUP_ONLY);
+            ESP_LOGD(state_name(), "Backup heat ONLY mode due to low-temp trigger");
+          }
         }
       }
     }
@@ -766,7 +793,7 @@
   }
   bool state_machine_class::compressor_modulation(){
     if(input[SILENT_MODE]->state && id(compressor_rpm).state <= 45) return true;
-    else if(!input[SILENT_MODE]->state && id(compressor_rpm).state <= 70) return true;
+    else if(!input[SILENT_MODE]->state && id(compressor_rpm).state <= 85 ) return true;
     else return false;
   }
   bool state_machine_class::check_low_temp_trigger(){
@@ -784,7 +811,7 @@
     target_error_integral = 0;
   }
   //proces automatic_boost and backup_heat_mode selects
-  void state_machine_class::proces_selects(){
+  void state_machine_class::process_selects(){
     auto index = id(automatic_boost).active_index();
     switch(index.value()){
       case 0:
